@@ -636,3 +636,164 @@ html[data-theme="light"] .mobile-more-menu > button { color: var(--text); backgr
   .view-title h1, .view-heading h1 { font-size: clamp(34px,10vw,46px); letter-spacing: -2.7px; }
 }
 
+
+/* ── Status badge (replaces full-width banners) ── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 10px 4px 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.status-badge:hover, .status-badge.open {
+  background: rgba(219, 234, 84, 0.12);
+  border-color: rgba(219, 234, 84, 0.35);
+}
+.status-badge .status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7e9631;
+  box-shadow: 0 0 0 2px rgba(126, 150, 49, 0.25);
+}
+.status-badge.fallback .status-dot {
+  background: #efad4d;
+  box-shadow: 0 0 0 2px rgba(239, 173, 77, 0.25);
+}
+.status-badge.stale .status-dot {
+  background: #db6650;
+  box-shadow: 0 0 0 2px rgba(219, 102, 80, 0.25);
+}
+.topbar-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+html[data-theme="light"] .status-badge {
+  background: rgba(255, 253, 247, 0.9);
+  border-color: #ddd6c4;
+  color: var(--text);
+}
+html[data-theme="light"] .status-badge:hover,
+html[data-theme="light"] .status-badge.open {
+  background: #f7f9dc;
+  border-color: #c5d07a;
+}
+
+/* Expandable status detail (only when badge clicked) */
+.status-detail-panel {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+.status-detail-panel.live { border-color: rgba(126, 150, 49, 0.35); }
+.status-detail-panel.fallback { border-color: rgba(239, 173, 77, 0.4); }
+.status-detail-panel.stale { border-color: rgba(219, 102, 80, 0.4); }
+.status-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 16px;
+  margin-bottom: 10px;
+}
+.status-detail-grid b {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.status-detail-grid span {
+  font-size: 13px;
+  color: var(--text);
+}
+.status-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.status-detail-actions button {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  cursor: pointer;
+}
+.status-detail-actions button.ghost {
+  opacity: 0.75;
+}
+html[data-theme="light"] .status-detail-panel {
+  background: rgba(255, 253, 247, 0.95);
+}
+
+/* ── Price ticker marquee ── */
+.price-ticker {
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.18);
+  height: 36px;
+  display: flex;
+  align-items: center;
+}
+.price-ticker.empty {
+  padding: 0 16px;
+}
+.ticker-track {
+  display: flex;
+  gap: 28px;
+  white-space: nowrap;
+  animation: ticker-scroll 48s linear infinite;
+  width: max-content;
+}
+.price-ticker:hover .ticker-track {
+  animation-play-state: paused;
+}
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ticker-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+.ticker-item b {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.ticker-item span {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.92;
+}
+.ticker-item em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+.ticker-item.positive em { color: #a8c53f; }
+.ticker-item.negative em { color: #db6650; }
+.ticker-item.muted, .ticker-item.muted em { color: var(--muted); }
+html[data-theme="light"] .price-ticker {
+  background: rgba(245, 241, 229, 0.95);
+}
+html[data-theme="light"] .ticker-item.positive em { color: #5a7a18; }
+html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
+
+/* Hide legacy full-width load-stage if any residual */
+.load-stage { display: none !important; }
+.fallback-banner, .persistence-banner { display: none !important; }

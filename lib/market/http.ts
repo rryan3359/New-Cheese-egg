@@ -58,8 +58,11 @@ export async function fetchValidated<T extends z.ZodTypeAny>(provider: string, u
       return { data, latencyMs: Date.now() - startedAt };
     } catch (error) {
       lastError = error;
+      // Hard fail statuses: no retry — let OKX fallback take over immediately
+      const msg = error instanceof Error ? error.message : String(error);
+      if (/HTTP (403|451|418|401)/.test(msg)) break;
       if (attempt === 0) {
-        const retryDelay = error instanceof Error && error.message.includes("HTTP 429") ? 1_200 : 250;
+        const retryDelay = msg.includes("HTTP 429") ? 1_200 : 200;
         await delayWithSignal(retryDelay, options.signal);
       }
     } finally {

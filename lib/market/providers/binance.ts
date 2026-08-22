@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { circuitHealth, fetchValidated, mapWithConcurrency } from "../http";
+import { CORE_SYMBOLS } from "../symbols";
 import { TIMEFRAMES, type Candle, type CandleMap, type ProviderHealth, type RawAsset, type Timeframe } from "../types";
 
-const DESIRED = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", "AVAXUSDT"];
+const DESIRED = [...CORE_SYMBOLS];
 const API = "https://fapi.binance.com";
 const numberString = z.string().transform(Number);
 const tickerSchema = z.array(z.object({ symbol: z.string(), lastPrice: numberString, priceChangePercent: numberString, quoteVolume: numberString }).passthrough());
@@ -21,28 +22,36 @@ function toCandles(rows: Array<Array<string | number>>): Candle[] {
 
 function message(reason: unknown) { return reason instanceof Error ? reason.message : String(reason); }
 
-export async function getBinanceData() {
+/** Fast-fail statuses that should immediately trigger OKX fallback (geo-block, forbidden, etc.) */
+export function isBinanceHardFail(error: unknown): boolean {
+  const msg = message(error);
+  return /HTTP (403|451|418|502|503)/.test(msg) || /circuit open/i.test(msg) || /exceeded .*deadline/i.test(msg);
+}
+
+export async function getBinanceData(options: { signal?: AbortSignal; symbols?: string[] } = {}) {
   const startedAt = Date.now();
+  const signal = options.signal;
   const [exchange, tickers, premiums] = await Promise.all([
-    fetchValidated("Binance", `${API}/fapi/v1/exchangeInfo`, exchangeSchema),
-    fetchValidated("Binance", `${API}/fapi/v1/ticker/24hr`, tickerSchema),
-    fetchValidated("Binance", `${API}/fapi/v1/premiumIndex`, premiumSchema),
+    fetchValidated("Binance", `${API}/fapi/v1/exchangeInfo`, exchangeSchema, { signal, timeoutMs: 5_000 }),
+    fetchValidated("Binance", `${API}/fapi/v1/ticker/24hr`, tickerSchema, { signal, timeoutMs: 5_000 }),
+    fetchValidated("Binance", `${API}/fapi/v1/premiumIndex`, premiumSchema, { signal, timeoutMs: 5_000 }),
   ]);
   const eligible = new Set(exchange.data.symbols.filter((item) => item.status === "TRADING" && item.contractType === "PERPETUAL" && item.quoteAsset === "USDT" && (item.underlyingType ?? "COIN") === "COIN").map((item) => item.symbol));
-  const symbols = DESIRED.filter((symbol) => eligible.has(symbol));
+  const desired = options.symbols?.length ? options.symbols : DESIRED;
+  const symbols = desired.filter((symbol) => eligible.has(symbol));
   const tickerMap = new Map(tickers.data.map((item) => [item.symbol, item]));
   const premiumMap = new Map(premiums.data.map((item) => [item.symbol, item]));
 
-  const assets = await mapWithConcurrency(symbols, 2, async (symbol): Promise<RawAsset> => {
+  const assets = await mapWithConcurrency(symbols, 3, async (symbol): Promise<RawAsset> => {
     const coreRequests = [
-      fetchValidated("Binance", `${API}/fapi/v1/openInterest?symbol=${symbol}`, oiSchema),
-      fetchValidated("Binance", `${API}/futures/data/openInterestHist?symbol=${symbol}&period=1h&limit=2`, oiHistorySchema),
-      fetchValidated("Binance", `${API}/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=1h&limit=30`, ratioSchema),
-      fetchValidated("Binance", `${API}/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=1h&limit=30`, ratioSchema),
+      fetchValidated("Binance", `${API}/fapi/v1/openInterest?symbol=${symbol}`, oiSchema, { signal, timeoutMs: 4_500 }),
+      fetchValidated("Binance", `${API}/futures/data/openInterestHist?symbol=${symbol}&period=1h&limit=2`, oiHistorySchema, { signal, timeoutMs: 4_500 }),
+      fetchValidated("Binance", `${API}/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=1h&limit=30`, ratioSchema, { signal, timeoutMs: 4_500 }),
+      fetchValidated("Binance", `${API}/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=1h&limit=30`, ratioSchema, { signal, timeoutMs: 4_500 }),
     ] as const;
     const [coreResults, candleResults] = await Promise.all([
       Promise.allSettled(coreRequests),
-      Promise.allSettled(TIMEFRAMES.map((timeframe) => fetchValidated("Binance", `${API}/fapi/v1/klines?symbol=${symbol}&interval=${intervalMap[timeframe]}&limit=${timeframe === "1d" ? 180 : 240}`, klineSchema))),
+      Promise.allSettled(TIMEFRAMES.map((timeframe) => fetchValidated("Binance", `${API}/fapi/v1/klines?symbol=${symbol}&interval=${intervalMap[timeframe]}&limit=${timeframe === "1d" ? 180 : 240}`, klineSchema, { signal, timeoutMs: 5_000 }))),
     ]);
     const [oiResult, historyResult, topResult, globalResult] = coreResults;
     const ticker = tickerMap.get(symbol);
@@ -95,4 +104,3 @@ export function failedBinanceHealth(error?: unknown): ProviderHealth {
   const state = circuitHealth("Binance");
   return { name: "Binance", state: "missing", latencyMs: null, lastSuccessAt: state.lastSuccessAt, lastFailureAt: state.lastFailureAt, consecutiveFailures: state.consecutiveFailures, circuitOpen: state.circuitOpen, coverage: { ticker: 0, funding: 0, oi: 0, positioning: 0, candles: 0 }, errors: error ? [message(error)] : [] };
 }
-

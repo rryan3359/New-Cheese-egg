@@ -25,7 +25,7 @@ const strategyLabels: Record<StrategyName, string> = {
   "ICT Liquidity Sweep": "流動性掃單",
   "Range Mean Reversion": "區間均值回歸",
 };
-const stateLabels: Record<string, string> = { live: "即時", fallback: "備援", stale: "稍早資料", missing: "資料不足", eligible: "條件完成", waiting: "等待中", invalid: "不成立", triggered: "已觸發", cooldown: "暫停提醒", disabled: "已關閉" };
+const stateLabels: Record<string, string> = { live: "即時", fallback: "備援", stale: "稍早資料", missing: "資料不足", eligible: "可規劃", waiting: "等待", invalid: "不合", triggered: "已觸發", cooldown: "暫停提醒", disabled: "已關閉" };
 const directionLabels: Record<string, string> = { Long: "偏多", Short: "偏空", Neutral: "中性" };
 const regimeLabels: Record<string, string> = { "Risk-Off": "風險偏高", Range: "區間整理", Trend: "趨勢行情" };
 const layerLabels: Record<string, string> = { ema: "均線", volume: "成交量", structure: "市場結構", plan: "交易計畫" };
@@ -95,7 +95,52 @@ export function ScannerView({ data, watchlist, onOpenChart }: { data: MarketHubP
 }
 
 export function DerivativesView({ data }: { data: MarketHubPayload }) {
-  return <div className="view-stack"><ViewTitle eyebrow="DERIVATIVES" title="看價格，也看誰正被擠在同一邊。" copy="資金費率、未平倉量與帳戶多空比會一起看；這裡顯示的是交易所帳戶多空傾向，不是真實持倉集中度。" /><section className="derivative-summary"><article><span>資金費率明顯偏高或偏低</span><b>{data.assets.filter((asset) => Math.abs(asset.funding.value ?? 0) >= .0005).length}</b><small>絕對值至少 0.05%</small></article><article><span>未平倉量一小時增加</span><b>{data.assets.filter((asset) => (asset.oiChange1h.value ?? -Infinity) > 0).length}</b><small>未平倉量不等於成交量</small></article><article><span>帳戶多空傾向偏極端</span><b>{data.assets.filter((asset) => Math.abs(asset.positioning.value ?? 0) >= 60).length}</b><small>不是巨鯨持倉比例</small></article></section><section className="position-table"><div className="position-row position-head"><span>幣種</span><span>資金費率</span><span>未平倉量</span><span>一小時變化</span><span>全體多空比</span><span>大戶多空比</span><span>傾向分數</span><span>資料狀態</span></div>{data.assets.map((asset) => <div className="position-row" key={asset.symbol}><b>{asset.symbol.replace("USDT", "")}</b><span>{asset.funding.value === null ? "—" : `${(asset.funding.value * 100).toFixed(4)}%`}</span><span>{compact(asset.openInterest.value)}</span><span className={tone(asset.oiChange1h.value)}>{formatPercent(asset.oiChange1h.value)}</span><span>{asset.globalRatio.value?.toFixed(2) ?? "—"}</span><span>{asset.topRatio.value?.toFixed(2) ?? "—"}</span><span className={tone(asset.positioning.value)}>{asset.positioning.value?.toFixed(1) ?? "—"}</span><StatePill state={asset.positioning.state} /></div>)}</section></div>;
+  const withFunding = data.assets.filter((a) => a.funding.value !== null);
+  const withOiChange = data.assets.filter((a) => a.oiChange1h.value !== null);
+  const withPos = data.assets.filter((a) => a.positioning.value !== null);
+  const extremeFunding = withFunding.filter((a) => Math.abs(a.funding.value!) >= 0.0005).length;
+  const oiUp = withOiChange.filter((a) => a.oiChange1h.value! > 0).length;
+  const extremePos = withPos.filter((a) => Math.abs(a.positioning.value!) >= 60).length;
+  return (
+    <div className="view-stack">
+      <ViewTitle eyebrow="DERIVATIVES" title="看價格，也看誰正被擠在同一邊。" copy="資金費率、未平倉量與帳戶多空比會一起看；這裡顯示的是交易所帳戶多空傾向，不是真實持倉集中度。缺值顯示「—／資料不足」，不會填假 0。" />
+      <section className="derivative-summary">
+        <article>
+          <span>資金費率明顯偏高或偏低</span>
+          <b>{withFunding.length ? extremeFunding : "—"}</b>
+          <small>{withFunding.length ? `絕對值 ≥ 0.05% · 樣本 ${withFunding.length}` : "資金費率資料不足"}</small>
+        </article>
+        <article>
+          <span>未平倉量一小時增加</span>
+          <b>{withOiChange.length ? oiUp : "—"}</b>
+          <small>{withOiChange.length ? `有資料 ${withOiChange.length} 檔` : "OI 1h 變化資料不足"}</small>
+        </article>
+        <article>
+          <span>帳戶多空傾向偏極端</span>
+          <b>{withPos.length ? extremePos : "—"}</b>
+          <small>{withPos.length ? `|分數| ≥ 60 · 樣本 ${withPos.length}` : "傾向分數資料不足"}</small>
+        </article>
+      </section>
+      <section className="position-table">
+        <div className="position-row position-head">
+          <span>幣種</span><span>資金費率</span><span>未平倉量</span><span>一小時變化</span>
+          <span>全體多空比</span><span>大戶多空比</span><span>傾向分數</span><span>資料狀態</span>
+        </div>
+        {data.assets.map((asset) => (
+          <div className="position-row" key={asset.symbol}>
+            <b>{asset.symbol.replace("USDT", "")}</b>
+            <span title={asset.funding.reason ?? undefined}>{asset.funding.value === null ? "—" : `${(asset.funding.value * 100).toFixed(4)}%`}</span>
+            <span title={asset.openInterest.reason ?? undefined}>{compact(asset.openInterest.value)}</span>
+            <span className={tone(asset.oiChange1h.value)} title={asset.oiChange1h.reason ?? undefined}>{formatPercent(asset.oiChange1h.value)}</span>
+            <span title={asset.globalRatio.reason ?? undefined}>{asset.globalRatio.value?.toFixed(2) ?? "—"}</span>
+            <span title={asset.topRatio.reason ?? undefined}>{asset.topRatio.value?.toFixed(2) ?? "—"}</span>
+            <span className={tone(asset.positioning.value)} title={asset.positioning.reason ?? undefined}>{asset.positioning.value?.toFixed(1) ?? "—"}</span>
+            <StatePill state={asset.positioning.state === "missing" && (asset.oiChange1h.state === "missing" || asset.globalRatio.state === "missing") ? "missing" : asset.positioning.state} />
+          </div>
+        ))}
+      </section>
+    </div>
+  );
 }
 
 export function StrategyView({ data, onOpenChart }: { data: MarketHubPayload; onOpenChart: OpenChart }) {
@@ -108,7 +153,7 @@ export function StrategyView({ data, onOpenChart }: { data: MarketHubPayload; on
   })}</section></div>;
 }
 
-export function ChartView({ data, symbol, initialTimeframe, initialStrategy, watchlist, onSymbolChange }: { data: MarketHubPayload; symbol: string; initialTimeframe: Timeframe; initialStrategy: StrategyName | null; watchlist: string[]; onSymbolChange: (symbol: string) => void }) {
+export function ChartView({ data, symbol, initialTimeframe, initialStrategy, watchlist, onSymbolChange, theme = "dark" }: { data: MarketHubPayload; symbol: string; initialTimeframe: Timeframe; initialStrategy: StrategyName | null; watchlist: string[]; onSymbolChange: (symbol: string) => void; theme?: "light" | "dark" }) {
   const asset = data.assets.find((item) => item.symbol === symbol) ?? data.assets[0];
   const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
   const [strategy, setStrategy] = useState<StrategyName>(initialStrategy ?? "Trend Pullback");
@@ -118,7 +163,7 @@ export function ChartView({ data, symbol, initialTimeframe, initialStrategy, wat
   const setup = asset.strategies.find((item) => item.timeframe === timeframe && item.strategy === strategy) ?? null;
   const symbolOptions = prioritizeByWatchlist(data.assets, watchlist);
   return <div className="view-stack"><section className="view-title with-action"><div><p>CHART WORKSPACE</p><h1>{asset.symbol.replace("USDT", "/USDT")} 決策圖表</h1><span>{timeframe} 真實 K 線 · 來源 {asset.price.source} · 共 {snapshot.candles.length} 根</span></div><div className="chart-toolbar"><select aria-label="選擇幣種" value={asset.symbol} onChange={(event) => onSymbolChange(event.target.value)}>{symbolOptions.map((item) => <option key={item.symbol} value={item.symbol}>{watchlist.includes(item.symbol) ? `★ ${item.symbol}` : item.symbol}</option>)}</select><select aria-label="選擇週期" value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe)}>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select><select aria-label="選擇策略" value={strategy} onChange={(event) => setStrategy(event.target.value as StrategyName)}>{(Object.keys(strategyTips) as StrategyName[]).map((item) => <option key={item} value={item}>{strategyLabels[item]}</option>)}</select></div></section>
-    <section className="chart-layout"><article className="terminal-panel chart-panel"><div className="chart-toolbar layer-toggles">{Object.entries(layers).map(([key, enabled]) => <button type="button" className={enabled ? "active" : ""} key={key} onClick={() => setLayers((current) => ({ ...current, [key]: !current[key as keyof typeof current] }))}>{layerLabels[key] ?? key}</button>)}</div><TerminalChart asset={asset} timeframe={timeframe} setup={setup} layers={layers} /><div className="chart-legend"><span>短期均線 EMA20 {formatPrice(snapshot.ema20.value)}</span><span>中期均線 EMA50 {formatPrice(snapshot.ema50.value)}</span><span>波動幅度 ATR {formatPrice(snapshot.atr.value)}</span><span>強弱 RSI {snapshot.rsi.value?.toFixed(1) ?? "—"}</span><span>趨勢 ADX {snapshot.adx.value?.toFixed(1) ?? "—"}</span><span>量能 Z {snapshot.volumeZScore.value?.toFixed(2) ?? "—"}</span></div></article>
+    <section className="chart-layout"><article className="terminal-panel chart-panel"><div className="chart-toolbar layer-toggles">{Object.entries(layers).map(([key, enabled]) => <button type="button" className={enabled ? "active" : ""} key={key} onClick={() => setLayers((current) => ({ ...current, [key]: !current[key as keyof typeof current] }))}>{layerLabels[key] ?? key}</button>)}</div><TerminalChart asset={asset} timeframe={timeframe} setup={setup} layers={layers} theme={theme} /><div className="chart-legend"><span>短期均線 EMA20 {formatPrice(snapshot.ema20.value)}</span><span>中期均線 EMA50 {formatPrice(snapshot.ema50.value)}</span><span>波動幅度 ATR {formatPrice(snapshot.atr.value)}</span><span>強弱 RSI {snapshot.rsi.value?.toFixed(1) ?? "—"}</span><span>趨勢 ADX {snapshot.adx.value?.toFixed(1) ?? "—"}</span><span>量能 Z {snapshot.volumeZScore.value?.toFixed(2) ?? "—"}</span></div></article>
       <article className="terminal-panel strategy-plan"><div className="panel-heading"><div><p>TRADE PLAN</p><h2>{setup ? strategyLabels[setup.strategy] : "策略資料不足"}</h2></div>{setup && <StatePill state={setup.status} />}</div>{setup ? <><div className="plan-regime"><span className={`direction ${setup.direction.toLowerCase()}`}>{directionLabels[setup.direction] ?? setup.direction}</span><b>{setup.timeframe}</b><em>完成 {setup.conditionsMet}/{setup.conditionsTotal} 個條件</em></div><div className="plan-levels"><span>進場區<b>{formatPrice(setup.entryLow)}–{formatPrice(setup.entryHigh)}</b><small>採較保守的邊界計算報酬風險比</small></span><span>停損<b>{formatPrice(setup.stop)}</b></span><span>目標一／二／三<b>{formatPrice(setup.tp1)} / {formatPrice(setup.tp2)} / {formatPrice(setup.tp3)}</b><small>{rr(setup.riskRewardTp1)} / {rr(setup.riskRewardTp2)} / {rr(setup.riskRewardTp3)}</small></span><span>{setup.primaryTarget ?? "主要目標"}<b>{rr(setup.primaryRiskReward)}</b></span></div><p className="plan-copy"><b>何時成立：</b>{setup.trigger}</p><p className="plan-copy"><b>何時失效：</b>{setup.invalidation}</p><ul className="checklist">{setup.reasons.map((reason) => <li className="done" key={reason}>✓ {reason}</li>)}{setup.missingConditions.map((reason) => <li key={reason}>— {reason}</li>)}</ul><div className="formula-note"><b>簡單教學</b><p>{strategyTips[setup.strategy]}</p></div></> : <div className="inline-empty">目前資料不足，先不產生交易計畫。</div>}</article>
     </section></div>;
 }

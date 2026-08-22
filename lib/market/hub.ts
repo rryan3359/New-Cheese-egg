@@ -1,15 +1,16 @@
 import { z } from "zod";
 import { circuitHealth, fetchValidated } from "./http";
 import { markPayloadStale, mergeProviderPayloads, metric } from "./merge";
-import { failedBinanceHealth, getBinanceData } from "./providers/binance";
+import { failedBinanceHealth, getBinanceData, isBinanceHardFail } from "./providers/binance";
 import { failedOkxHealth, fullOkxFetchPlan, getOkxData } from "./providers/okx";
 import { TIMEFRAMES, type MarketHubPayload, type OkxFetchPlan, type ProviderHealth, type ProviderPayload } from "./types";
 
-const FRESH_TTL_MS = 30_000;
+const FRESH_TTL_MS = 45_000;
 const STALE_TTL_MS = 10 * 60_000;
-const BINANCE_DEADLINE_MS = 10_000;
-const OKX_NORMAL_DEADLINE_MS = 20_000;
-const OKX_FORCE_DEADLINE_MS = 35_000;
+/** Shorter deadline so 403/451/timeout fail fast and OKX takes over quickly */
+const BINANCE_DEADLINE_MS = 6_500;
+const OKX_NORMAL_DEADLINE_MS = 18_000;
+const OKX_FORCE_DEADLINE_MS = 32_000;
 const fearSchema = z.object({ data: z.array(z.object({ value: z.string().transform(Number), value_classification: z.string(), timestamp: z.string() })) });
 type FearResult = Awaited<ReturnType<typeof getFearGreed>>;
 type ProviderClients = {
@@ -49,7 +50,7 @@ async function withDeadline<T>(label: string, timeoutMs: number, factory: (signa
   const abortTimer = setTimeout(() => controller.abort(), timeoutMs);
   let hardTimer: ReturnType<typeof setTimeout> | null = null;
   const hardDeadline = new Promise<never>((_, reject) => {
-    hardTimer = setTimeout(() => reject(new Error(`${label} exceeded ${timeoutMs}ms deadline`)), timeoutMs + 750);
+    hardTimer = setTimeout(() => reject(new Error(`${label} exceeded ${timeoutMs}ms deadline`)), timeoutMs + 500);
   });
   try {
     return await Promise.race([factory(controller.signal), hardDeadline]);
@@ -70,7 +71,8 @@ export function okxPlanForMissingFields(binance: ProviderPayload): OkxFetchPlan 
   for (const asset of binance.assets) {
     if (asset.price === null || asset.change24h === null || asset.quoteVolume === null) tickerSymbols.push(asset.symbol);
     if (asset.funding === null) fundingSymbols.push(asset.symbol);
-    if (asset.openInterest === null) openInterestSymbols.push(asset.symbol);
+    // Also fill OI / OI change / positioning gaps from OKX
+    if (asset.openInterest === null || asset.oiChange1h === null || !asset.globalRatios.length) openInterestSymbols.push(asset.symbol);
     const missingTimeframes = TIMEFRAMES.filter((timeframe) => !asset.candlesByTimeframe[timeframe].length);
     if (missingTimeframes.length) candleTimeframes[asset.symbol] = missingTimeframes;
   }
@@ -79,11 +81,11 @@ export function okxPlanForMissingFields(binance: ProviderPayload): OkxFetchPlan 
 }
 
 function fetchedFields(plan: OkxFetchPlan) {
-  if (plan.full) return ["ticker", "funding", "openInterest", "candles:15m/1h/4h/1d"];
+  if (plan.full) return ["ticker", "funding", "openInterest", "oiChange", "longShortRatio", "candles:15m/1h/4h/1d"];
   return [
     ...plan.tickerSymbols.map((symbol) => `${symbol}:ticker`),
     ...plan.fundingSymbols.map((symbol) => `${symbol}:funding`),
-    ...plan.openInterestSymbols.map((symbol) => `${symbol}:openInterest`),
+    ...plan.openInterestSymbols.map((symbol) => `${symbol}:openInterest+positioning`),
     ...Object.entries(plan.candleTimeframes).flatMap(([symbol, timeframes]) => (timeframes ?? []).map((timeframe) => `${symbol}:candles:${timeframe}`)),
   ];
 }
@@ -118,19 +120,29 @@ export async function buildMarketHub(forceOkx = false, providers: ProviderClient
   }
 
   const binanceStartedAt = Date.now();
-  const binanceResult = await settled(withDeadline("Binance", providers.binanceTimeoutMs ?? BINANCE_DEADLINE_MS, () => (providers.binance ?? getBinanceData)()));
+  const binanceResult = await settled(
+    withDeadline("Binance", providers.binanceTimeoutMs ?? BINANCE_DEADLINE_MS, (signal) =>
+      (providers.binance ?? (() => getBinanceData({ signal })))(),
+    ),
+  );
   const binanceDurationMs = Date.now() - binanceStartedAt;
+  const binanceHardFail = !binanceResult.value && isBinanceHardFail(binanceResult.error);
   const binancePayload = binanceResult.value?.assets.length ? binanceResult.value : null;
   const binanceHealth = binancePayload?.health ?? failedBinanceHealth(binanceResult.error ?? new Error("Binance returned zero assets"));
   const plan = binancePayload ? okxPlanForMissingFields(binancePayload) : fullOkxFetchPlan();
   let okxResult: { value: ProviderPayload | null; error: unknown } | null = null;
-  if (!binancePayload || plan.symbols.length) {
-    okxResult = await settled(withDeadline("OKX normal fallback", providers.okxTimeoutMs ?? OKX_NORMAL_DEADLINE_MS, (signal) => okxProvider(plan, signal)));
+  // Always run OKX when Binance hard-failed, returned nothing, or has missing fields
+  if (!binancePayload || plan.symbols.length || binanceHardFail) {
+    const okxDeadline = binanceHardFail || !binancePayload
+      ? (providers.okxTimeoutMs ?? OKX_FORCE_DEADLINE_MS)
+      : (providers.okxTimeoutMs ?? OKX_NORMAL_DEADLINE_MS);
+    okxResult = await settled(withDeadline("OKX normal fallback", okxDeadline, (signal) => okxProvider(plan.full || binanceHardFail ? fullOkxFetchPlan() : plan, signal)));
     if (okxResult.value) lastOkxHealth = okxResult.value.health;
   }
   const fear = await fearPromise;
   const okxPayload = okxResult ? { assets: okxResult.value?.assets ?? [], health: okxResult.value?.health ?? failedOkxHealth(okxResult.error) } : okxStandbyPayload();
   const duration = Date.now() - startedAt;
+  const effectivePlan = binanceHardFail || !binancePayload ? fullOkxFetchPlan() : plan;
   return mergeProviderPayloads({
     binance: { assets: binancePayload?.assets ?? [], health: binanceHealth },
     okx: okxPayload,
@@ -138,12 +150,12 @@ export async function buildMarketHub(forceOkx = false, providers: ProviderClient
     fearHealth: fear.health,
     staleTtlMs: STALE_TTL_MS,
     pipeline: {
-      stage: !binancePayload ? "using-okx-fallback" : plan.symbols.length ? "filling-from-okx" : "using-binance",
+      stage: !binancePayload || binanceHardFail ? "using-okx-fallback" : plan.symbols.length ? "filling-from-okx" : "using-binance",
       mode: "normal",
       marketApiDurationMs: duration,
       binanceDurationMs,
       okxDurationMs: okxResult?.value?.health.latencyMs ?? null,
-      okxFetchedFields: okxResult ? fetchedFields(plan) : [],
+      okxFetchedFields: okxResult ? fetchedFields(effectivePlan) : [],
     },
   });
 }
@@ -172,4 +184,3 @@ export function __setMarketCacheForTests(value: { payload: MarketHubPayload; sto
   inFlight.clear();
   lastOkxHealth = null;
 }
-

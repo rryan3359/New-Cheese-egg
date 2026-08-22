@@ -6,7 +6,7 @@ import type { AssetSnapshot, StrategyResult, Timeframe } from "../../lib/market/
 
 type Layers = { ema: boolean; volume: boolean; structure: boolean; plan: boolean };
 
-export default function TerminalChart({ asset, timeframe, setup, layers }: { asset: AssetSnapshot; timeframe: Timeframe; setup: StrategyResult | null; layers: Layers }) {
+export default function TerminalChart({ asset, timeframe, setup, layers, theme = "dark" }: { asset: AssetSnapshot; timeframe: Timeframe; setup: StrategyResult | null; layers: Layers; theme?: "light" | "dark" }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const layersKey = `${layers.ema}-${layers.volume}-${layers.structure}-${layers.plan}`;
   const setupKey = setup
@@ -37,6 +37,34 @@ export default function TerminalChart({ asset, timeframe, setup, layers }: { ass
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       const width = rect.width;
       const height = rect.height;
+      const isLight = theme === "light";
+      const palette = isLight
+        ? {
+            grid: "rgba(30,36,29,.08)",
+            upStroke: "#5a7a18",
+            upFill: "#6f9420",
+            downStroke: "#c44a36",
+            downFill: "#d45540",
+            volUp: "rgba(110,150,40,.35)",
+            volDown: "rgba(200,80,60,.30)",
+            ema20: "#8a9e20",
+            ema50: "#c48420",
+            label: "#5c6358",
+            entry: "rgba(140,160,40,.12)",
+          }
+        : {
+            grid: "rgba(255,255,255,.055)",
+            upStroke: "#a8c53f",
+            upFill: "#829c31",
+            downStroke: "#db6650",
+            downFill: "#bd5946",
+            volUp: "rgba(152,181,60,.25)",
+            volDown: "rgba(219,102,80,.23)",
+            ema20: "#dbe954",
+            ema50: "#efad4d",
+            label: "#7a8276",
+            entry: "rgba(219,234,84,.075)",
+          };
       const candles = allCandles.slice(-90);
       const closes = candles.map((candle) => candle.close);
       const ema20 = emaSeries(closes, 20);
@@ -51,7 +79,7 @@ export default function TerminalChart({ asset, timeframe, setup, layers }: { ass
       const y = (value: number) => priceTop + ((high - value) / spread) * (priceBottom - priceTop);
       const slot = width / candles.length;
       ctx.clearRect(0, 0, width, height);
-      ctx.strokeStyle = "rgba(255,255,255,.055)";
+      ctx.strokeStyle = palette.grid;
       ctx.lineWidth = 1;
       for (let row = 1; row < 5; row += 1) {
         const lineY = priceTop + ((priceBottom - priceTop) / 5) * row;
@@ -62,7 +90,7 @@ export default function TerminalChart({ asset, timeframe, setup, layers }: { ass
       }
 
       if (layers.plan && setup && setup.entryLow !== null && setup.entryHigh !== null) {
-        ctx.fillStyle = "rgba(219,234,84,.075)";
+        ctx.fillStyle = palette.entry;
         ctx.fillRect(0, y(setup.entryHigh), width, Math.max(2, y(setup.entryLow) - y(setup.entryHigh)));
         const levels = [
           { value: setup.stop, color: "#e66c50" },
@@ -104,7 +132,7 @@ export default function TerminalChart({ asset, timeframe, setup, layers }: { ass
         const maxVolume = Math.max(...candles.map((candle) => candle.volume), 1);
         candles.forEach((candle, index) => {
           const barHeight = (candle.volume / maxVolume) * (volumeHeight - 12);
-          ctx.fillStyle = candle.close >= candle.open ? "rgba(152,181,60,.25)" : "rgba(219,102,80,.23)";
+          ctx.fillStyle = candle.close >= candle.open ? palette.volUp : palette.volDown;
           ctx.fillRect(index * slot + 1, height - 24 - barHeight, Math.max(1, slot - 2), barHeight);
         });
       }
@@ -112,8 +140,8 @@ export default function TerminalChart({ asset, timeframe, setup, layers }: { ass
       candles.forEach((candle, index) => {
         const center = index * slot + slot / 2;
         const rising = candle.close >= candle.open;
-        ctx.strokeStyle = rising ? "#a8c53f" : "#db6650";
-        ctx.fillStyle = rising ? "#829c31" : "#bd5946";
+        ctx.strokeStyle = rising ? palette.upStroke : palette.downStroke;
+        ctx.fillStyle = rising ? palette.upFill : palette.downFill;
         ctx.beginPath();
         ctx.moveTo(center, y(candle.high));
         ctx.lineTo(center, y(candle.low));
@@ -139,8 +167,8 @@ export default function TerminalChart({ asset, timeframe, setup, layers }: { ass
         if (started) ctx.stroke();
       };
       if (layers.ema) {
-        plotLine(ema20, "#dbe954");
-        plotLine(ema50, "#efad4d");
+        plotLine(ema20, palette.ema20);
+        plotLine(ema50, palette.ema50);
       }
 
       if (layers.structure && setup?.strategy === "ICT Liquidity Sweep" && setup.status === "eligible") {
@@ -161,7 +189,7 @@ export default function TerminalChart({ asset, timeframe, setup, layers }: { ass
         ctx.fill();
       }
 
-      ctx.fillStyle = "#7a8276";
+      ctx.fillStyle = palette.label;
       ctx.font = "11px monospace";
       ctx.fillText(`${candles.length} × ${timeframe.toUpperCase()} · ${asset.price.source} · FVG unavailable from aggregate candles`, 8, height - 9);
     };
@@ -178,7 +206,7 @@ export default function TerminalChart({ asset, timeframe, setup, layers }: { ass
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [asset, candlesKey, layers, layersKey, setup, setupKey, timeframe]);
+  }, [asset, candlesKey, layers, layersKey, setup, setupKey, timeframe, theme]);
 
   return <canvas ref={canvasRef} className="terminal-chart" role="img" aria-label={`${asset.symbol} ${timeframe} K 線、EMA、成交量與策略價位`} />;
 }

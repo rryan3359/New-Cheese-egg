@@ -19,6 +19,7 @@ import {
 import { AlertsView, HealthView, JournalView, RiskView, SettingsView } from "./workbench/ToolViews";
 import { DataBanners } from "./workbench/shell/DataBanners";
 import { MobileNav } from "./workbench/shell/MobileNav";
+import { PriceTicker } from "./workbench/shell/PriceTicker";
 import { Sidebar } from "./workbench/shell/Sidebar";
 import { Topbar } from "./workbench/shell/Topbar";
 
@@ -49,6 +50,8 @@ export default function CryptoWorkbench() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("light");
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [hideStatusDetails, setHideStatusDetails] = useState(false);
 
   const {
     persistence,
@@ -114,6 +117,7 @@ export default function CryptoWorkbench() {
     const hash = window.location.hash.slice(1);
     const collapsed = parseStored<boolean>(storageKeys.sidebar, false);
     const savedTheme = localStorage.getItem(storageKeys.theme) === "dark" ? "dark" : "light";
+    const hideDetails = localStorage.getItem("cheese-egg:hide-status-details") === "1";
     document.documentElement.dataset.theme = savedTheme;
 
     queueMicrotask(() => {
@@ -126,6 +130,7 @@ export default function CryptoWorkbench() {
       setSettings(localSettings);
       setSidebarCollapsed(collapsed);
       setTheme(savedTheme);
+      setHideStatusDetails(hideDetails);
       setHydrated(true);
     });
 
@@ -199,7 +204,17 @@ export default function CryptoWorkbench() {
 
   const renderView = () => {
     if (!data) {
-      return <EmptyState title={loading ? loadStage : "目前沒有可用市場資料"} copy={error ?? "正在取得 Binance 永續合約行情；只有必要時才啟用 OKX 備援。"} />;
+      return (
+        <EmptyState
+          title={loading ? `載入中 · ${loadStage}` : "目前沒有可用市場資料"}
+          copy={
+            error ??
+            (loading
+              ? "先抓價格與資金費率，再補 OI／多空比／K 線。Binance 若 403／超時會立刻改走 OKX，請稍候數秒。"
+              : "正在取得永續合約行情；Binance 失敗時自動備援 OKX。")
+          }
+        />
+      );
     }
     switch (activeView) {
       case "scanner":
@@ -218,6 +233,7 @@ export default function CryptoWorkbench() {
             initialStrategy={selectedStrategy}
             watchlist={settings.watchlist}
             onSymbolChange={setSelectedSymbol}
+            theme={theme}
           />
         );
       case "alerts":
@@ -276,9 +292,15 @@ export default function CryptoWorkbench() {
           theme={theme}
           refreshing={refreshing}
           fallbackTesting={fallbackTesting}
+          loadStage={loadStage}
+          loading={loading}
+          estimatedSeconds={loading || refreshing ? (data ? 3 : 8) : null}
           onToggleTheme={toggleTheme}
           onRefresh={() => void refresh()}
+          statusOpen={statusOpen}
+          onToggleStatus={() => setStatusOpen((v) => !v)}
         />
+        <PriceTicker data={data} onSelect={(symbol) => openChart(symbol)} />
         <div className="workbench-content">
           <DataBanners
             loadStage={loadStage}
@@ -291,6 +313,14 @@ export default function CryptoWorkbench() {
             onDismissToast={(id) => setToasts((current) => current.filter((item) => item.id !== id))}
             onRefresh={() => void refresh()}
             onNavigate={navigate}
+            hideStatusDetails={hideStatusDetails}
+            statusOpen={statusOpen}
+            onToggleStatus={() => setStatusOpen(false)}
+            onHideStatusDetails={() => {
+              setHideStatusDetails(true);
+              setStatusOpen(false);
+              localStorage.setItem("cheese-egg:hide-status-details", "1");
+            }}
           />
           {renderView()}
           <footer className="workbench-footer">

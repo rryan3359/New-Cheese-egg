@@ -2,7 +2,7 @@ import { adxApprox, atr, bollinger, changeOver, ema, positioningScore, rollingBo
 import { evaluateStrategies } from "./strategies";
 import { TIMEFRAMES, type AssetSnapshot, type DataState, type MarketHubPayload, type Metric, type ProviderPayload, type StrategyResult, type Timeframe, type TimeframeSnapshot } from "./types";
 
-const NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ethereum", SOL: "Solana", BNB: "BNB", XRP: "XRP", DOGE: "Dogecoin", ADA: "Cardano", AVAX: "Avalanche" };
+import { ASSET_NAMES as NAMES } from "./symbols";
 
 export function metric<T>(value: T | null, source: Metric<T>["source"], state: DataState, latencyMs: number | null, reason: string | null = null, now = new Date().toISOString()): Metric<T> {
   return { value, source, state, updatedAt: now, latencyMs, reason };
@@ -73,7 +73,25 @@ export function mergeProviderPayloads(input: { binance: ProviderPayload | null; 
     const oiChange = chooseMetric(primary?.oiChange1h, fallback?.oiChange1h, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "OI change 在兩個來源皆缺少", now);
     const quoteVolume = chooseMetric(primary?.quoteVolume, fallback?.quoteVolume, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Quote volume unavailable", now);
     const volumeSource = primary?.quoteVolume !== null && primary?.quoteVolume !== undefined ? primary : fallback?.quoteVolume !== null && fallback?.quoteVolume !== undefined ? fallback : null;
-    const position = positioningScore(primary?.topRatios ?? [], primary?.globalRatios ?? []);
+    const topRatios = (primary?.topRatios?.length ? primary.topRatios : fallback?.topRatios) ?? [];
+    const globalRatios = (primary?.globalRatios?.length ? primary.globalRatios : fallback?.globalRatios) ?? [];
+    const ratioSource: "Binance" | "OKX" | "Calculated" = primary?.topRatios?.length || primary?.globalRatios?.length ? "Binance" : fallback?.globalRatios?.length || fallback?.topRatios?.length ? "OKX" : "Calculated";
+    // Prefer Binance dual-ratio positioning; if only global (OKX), use a simplified score from global alone
+    let position: number | null = null;
+    let positionReason: string | null = "Positioning 需要多空比歷史（Binance Top+Global 或 OKX Global）";
+    if (topRatios.length >= 5 && globalRatios.length >= 5) {
+      position = positioningScore(topRatios, globalRatios);
+      positionReason = null;
+    } else if (globalRatios.length >= 5) {
+      // Simplified: z-score of log(global ratio) around its mean
+      const logs = globalRatios.map((r) => Math.log(r));
+      const avg = logs.reduce((s, v) => s + v, 0) / logs.length;
+      const variance = logs.reduce((s, v) => s + (v - avg) ** 2, 0) / logs.length;
+      const std = Math.sqrt(variance) || 0;
+      const z = std ? (logs.at(-1)! - avg) / std : 0;
+      position = Math.max(-100, Math.min(100, Math.round(z * 34)));
+      positionReason = "僅有 Global 多空比（無大戶比），傾向分數為簡化估算";
+    }
     const timeframes = Object.fromEntries(TIMEFRAMES.map((timeframe) => {
       const primaryCandles = primary?.candlesByTimeframe[timeframe] ?? [];
       const fallbackCandles = fallback?.candlesByTimeframe[timeframe] ?? [];
@@ -82,7 +100,7 @@ export function mergeProviderPayloads(input: { binance: ProviderPayload | null; 
       const state: DataState = primaryCandles.length ? "live" : fallbackCandles.length ? "fallback" : "missing";
       return [timeframe, buildTimeframe(timeframe, candles, source, state, primary?.latencyMs ?? fallback?.latencyMs ?? null, now)];
     })) as Record<Timeframe, TimeframeSnapshot>;
-    const strategies = TIMEFRAMES.flatMap((timeframe) => evaluateStrategies({ symbol, timeframe, candles: timeframes[timeframe].candles, funding: funding.value, oiChange1h: oiChange.value, topRatios: primary?.topRatios ?? [], globalRatios: primary?.globalRatios ?? [], now }));
+    const strategies = TIMEFRAMES.flatMap((timeframe) => evaluateStrategies({ symbol, timeframe, candles: timeframes[timeframe].candles, funding: funding.value, oiChange1h: oiChange.value, topRatios, globalRatios, now }));
     return {
       symbol, name: NAMES[symbol.replace("USDT", "")] ?? symbol,
       price: chooseMetric(primary?.price, fallback?.price, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Price unavailable", now),
@@ -93,9 +111,9 @@ export function mergeProviderPayloads(input: { binance: ProviderPayload | null; 
       quoteVolumeMethod: volumeSource?.quoteVolumeMethod ?? "成交量單位無法確認，不參與跨來源排序",
       openInterest: chooseMetric(primary?.openInterest, fallback?.openInterest, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "OI unavailable", now),
       oiChange1h: oiChange, funding,
-      globalRatio: chooseMetric(primary?.globalRatios.at(-1), null, primary?.latencyMs ?? null, null, "Global ratio 無對應 OKX 備援", now),
-      topRatio: chooseMetric(primary?.topRatios.at(-1), null, primary?.latencyMs ?? null, null, "Top Trader ratio 無對應 OKX 備援", now),
-      positioning: metric(position, "Calculated", position === null ? "missing" : "live", primary?.latencyMs ?? null, position === null ? "Positioning 需要 Top／Global ratio 歷史" : "交易所帳戶多空傾向，非真實持倉集中度", now),
+      globalRatio: chooseMetric(primary?.globalRatios.at(-1), fallback?.globalRatios.at(-1), primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Global 多空比在 Binance／OKX 皆缺少", now),
+      topRatio: chooseMetric(primary?.topRatios.at(-1), fallback?.topRatios.at(-1), primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "大戶多空比僅 Binance 提供；OKX 無對應欄位", now),
+      positioning: metric(position, ratioSource === "Calculated" ? "Calculated" : ratioSource, position === null ? "missing" : ratioSource === "OKX" ? "fallback" : "live", primary?.latencyMs ?? fallback?.latencyMs ?? null, position === null ? positionReason : (positionReason ?? "交易所帳戶多空傾向，非真實持倉集中度"), now),
       timeframes, strategies, setup: preferredSetup(strategies),
     };
   }).filter((asset) => asset.price.value !== null || TIMEFRAMES.some((timeframe) => asset.timeframes[timeframe].candles.length));

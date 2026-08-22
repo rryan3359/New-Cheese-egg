@@ -48,7 +48,7 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
       const currentRequest = ++requestRef.current;
       const controller = new AbortController();
       abortRef.current = controller;
-      const clientDeadlineMs = forceOkx ? 42_000 : 25_000;
+      const clientDeadlineMs = forceOkx ? 38_000 : 18_000;
       const clientDeadline = window.setTimeout(() => controller.abort(), clientDeadlineMs);
       if (forceOkx) {
         fallbackTestingRef.current = true;
@@ -84,8 +84,8 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
         const message =
           reason instanceof Error && reason.name === "AbortError"
             ? forceOkx
-              ? "OKX 完整測試已在 42 秒停止；目前快照不受影響"
-              : "行情更新已在 25 秒停止；正在保留最後成功資料"
+              ? "OKX 完整測試已在 38 秒停止；目前快照不受影響"
+              : "行情更新已在 18 秒停止；正在保留最後成功資料"
             : reason instanceof Error
               ? reason.message
               : "市場資料暫時無法更新";

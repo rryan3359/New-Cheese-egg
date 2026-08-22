@@ -12,8 +12,13 @@ type TopbarProps = {
   theme: "light" | "dark";
   refreshing: boolean;
   fallbackTesting: boolean;
+  loadStage: string;
+  loading: boolean;
+  estimatedSeconds?: number | null;
   onToggleTheme: () => void;
   onRefresh: () => void;
+  onToggleStatus?: () => void;
+  statusOpen?: boolean;
 };
 
 export function Topbar({
@@ -26,9 +31,24 @@ export function Topbar({
   theme,
   refreshing,
   fallbackTesting,
+  loadStage,
+  loading,
+  estimatedSeconds,
   onToggleTheme,
   onRefresh,
+  onToggleStatus,
+  statusOpen,
 }: TopbarProps) {
+  const busy = refreshing || fallbackTesting || loading;
+  const stageHint =
+    busy
+      ? estimatedSeconds != null
+        ? `載入中（約 ${estimatedSeconds} 秒）`
+        : loadStage.includes("備援") || loadStage.includes("OKX")
+          ? "備援中…"
+          : "載入中…"
+      : null;
+
   return (
     <header className="workbench-topbar">
       <div>
@@ -38,10 +58,21 @@ export function Topbar({
         <p>{activeLabel}</p>
       </div>
       <div className="topbar-health">
-        <span className={`health-indicator ${healthTone}`}>● {healthLabel}</span>
-        <span>{assetCount} 個市場</span>
-        <span>{persistenceLabel}</span>
-        <span>更新 {updatedAt}</span>
+        <button
+          type="button"
+          className={`status-badge ${healthTone} ${statusOpen ? "open" : ""}`}
+          onClick={onToggleStatus}
+          aria-expanded={statusOpen}
+          title="點擊查看資料狀態詳情"
+        >
+          <i className="status-dot" aria-hidden="true" />
+          <span>
+            {stageHint ?? healthLabel}
+            {assetCount > 0 ? ` · ${assetCount} 市` : ""}
+          </span>
+        </button>
+        <span className="topbar-meta">{persistenceLabel}</span>
+        <span className="topbar-meta">更新 {updatedAt}</span>
         <button
           className="theme-toggle"
           type="button"

@@ -178,12 +178,21 @@ test("ICT liquidity sweep distinguishes waiting from missing data", () => {
 
 test("field merge uses OKX fallback and preserves unavailable positioning as missing", () => {
   const primary = rawAsset({ funding: null, topRatios: [], globalRatios: [] });
-  const fallback = rawAsset({ funding: .0002 });
+  const fallback = rawAsset({ funding: .0002, topRatios: [], globalRatios: [] });
   const payload = market(provider("Binance", primary), provider("OKX", fallback));
   assert.equal(payload.assets[0].funding.source, "OKX");
   assert.equal(payload.assets[0].funding.state, "fallback");
   assert.equal(payload.assets[0].positioning.value, null);
   assert.equal(payload.assets[0].positioning.state, "missing");
+});
+
+test("OKX global ratios alone can produce simplified positioning score", () => {
+  const primary = rawAsset({ topRatios: [], globalRatios: [] });
+  const fallback = rawAsset({ topRatios: [], globalRatios: [0.8, 0.85, 0.9, 0.95, 1.0, 1.2] });
+  const payload = market(provider("Binance", primary), provider("OKX", fallback));
+  assert.notEqual(payload.assets[0].positioning.value, null);
+  assert.equal(payload.assets[0].positioning.state, "fallback");
+  assert.equal(payload.assets[0].globalRatio.source, "OKX");
 });
 
 test("merge rejects empty providers and stale cache expires honestly", () => {
