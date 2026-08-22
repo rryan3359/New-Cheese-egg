@@ -11,6 +11,7 @@ export type LoadStage =
   | "使用 Binance 即時資料"
   | "Binance 缺值，補抓 OKX"
   | "L2 衍生品補齊中"
+  | "L3 圖表／策略 K 線載入中"
   | "OKX 備援啟用"
   | "顯示最後成功資料"
   | "所有來源不可用";
@@ -28,6 +29,12 @@ function stageFromPipeline(payload: MarketHubPayload): LoadStage {
   return "OKX 備援啟用";
 }
 
+function hasUsableCandles(payload: MarketHubPayload): boolean {
+  return payload.assets.some((asset) =>
+    Object.values(asset.timeframes).some((tf) => tf.candles.length >= 30),
+  );
+}
+
 export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated }: UseMarketDataOptions) {
   const [data, setData] = useState<MarketHubPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,14 +42,18 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
   const [fallbackTesting, setFallbackTesting] = useState(false);
   const [loadStage, setLoadStage] = useState<LoadStage>("讀取最近資料");
   const [error, setError] = useState<string | null>(null);
-  const [activeTier, setActiveTier] = useState<{ l1: boolean; l2: boolean }>({ l1: false, l2: false });
+  const [activeTier, setActiveTier] = useState<{ l1: boolean; l2: boolean; l3: boolean }>({
+    l1: false,
+    l2: false,
+    l3: false,
+  });
 
   const normalRequestId = useRef(0);
   const forceRequestId = useRef(0);
   const dataRef = useRef<MarketHubPayload | null>(null);
   const normalAbortRef = useRef<AbortController | null>(null);
   const forceAbortRef = useRef<AbortController | null>(null);
-  const l2AbortRef = useRef<AbortController | null>(null);
+  const bgAbortRef = useRef<AbortController | null>(null);
   const refreshingRef = useRef(false);
   const fallbackTestingRef = useRef(false);
 
@@ -63,26 +74,25 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
     [evaluateCurrentAlerts],
   );
 
-  const fetchTier = useCallback(
-    async (tier: FetchTier, signal: AbortSignal, forceOkx = false) => {
-      const response = await fetch(`/api/crypto?tier=${tier}${forceOkx ? "&provider=okx" : ""}`, {
-        cache: "no-store",
-        signal,
-      });
-      const payload = (await response.json()) as MarketHubPayload & { error?: string };
-      if (!response.ok || !payload.success || !payload.assets?.length) {
-        throw new Error(payload.error ?? `Market Data Hub 回傳 ${response.status}`);
-      }
-      return payload;
-    },
-    [],
-  );
+  const fetchTier = useCallback(async (tier: FetchTier, signal: AbortSignal, forceOkx = false) => {
+    const response = await fetch(`/api/crypto?tier=${tier}${forceOkx ? "&provider=okx" : ""}`, {
+      cache: "no-store",
+      signal,
+    });
+    const payload = (await response.json()) as MarketHubPayload & { error?: string };
+    if (!response.ok || !payload.success || !payload.assets?.length) {
+      throw new Error(payload.error ?? `Market Data Hub 回傳 ${response.status}`);
+    }
+    return payload;
+  }, []);
 
   /**
    * Progressive refresh:
-   * 1) L1 (priority ticker+funding+fear) → cockpit usable
-   * 2) L2 in background (OI/positioning, full symbol set)
-   * Force-OKX still uses a single longer path (tier=l2).
+   * 1) L1 — priority price/funding → cockpit usable in 1–3s
+   * 2) L2 — OI / positioning for all symbols
+   * 3) L3 — short-depth candles → opportunity scanner + TerminalChart + strategies
+   *
+   * Force-OKX uses tier=l3 so charts/scanner still populate on pure OKX.
    */
   const refresh = useCallback(
     async (forceOkx = false) => {
@@ -95,8 +105,7 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // Client deadlines aligned with server tier deadlines + network slack
-      const clientDeadlineMs = forceOkx ? 32_000 : 16_000;
+      const clientDeadlineMs = forceOkx ? 38_000 : 8_000;
       const clientDeadline = window.setTimeout(() => controller.abort(), clientDeadlineMs);
 
       if (forceOkx) {
@@ -107,13 +116,14 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
         refreshingRef.current = true;
         setRefreshing(true);
         setLoadStage("L1 關鍵行情載入中");
-        setActiveTier((s) => ({ ...s, l1: true }));
+        setActiveTier({ l1: true, l2: false, l3: false });
       }
       setError(null);
 
       try {
         if (forceOkx) {
-          const payload = await fetchTier("l2", controller.signal, true);
+          // Full usable snapshot on OKX (includes short candles)
+          const payload = await fetchTier("l3", controller.signal, true);
           if (currentRequest !== requestRef.current) return;
           await applyPayload(payload, "replace");
           return;
@@ -124,28 +134,57 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
         if (currentRequest !== requestRef.current) return;
         await applyPayload(l1, dataRef.current ? "progressive" : "replace");
         setLoading(false);
-        setActiveTier((s) => ({ ...s, l1: false, l2: true }));
+        setActiveTier({ l1: false, l2: true, l3: false });
         setLoadStage("L2 衍生品補齊中");
 
-        // --- L2 background (own abort so L1 success isn't cancelled) ---
-        l2AbortRef.current?.abort();
-        const l2Controller = new AbortController();
-        l2AbortRef.current = l2Controller;
-        const l2Deadline = window.setTimeout(() => l2Controller.abort(), 14_000);
+        // Background L2 + L3 share one controller so a new refresh cancels both
+        bgAbortRef.current?.abort();
+        const bgController = new AbortController();
+        bgAbortRef.current = bgController;
+
+        // --- L2 ---
         try {
-          const l2 = await fetchTier("l2", l2Controller.signal, false);
-          if (currentRequest !== requestRef.current) return;
-          await applyPayload(l2, "progressive");
+          const l2Deadline = window.setTimeout(() => bgController.abort(), 14_000);
+          try {
+            const l2 = await fetchTier("l2", bgController.signal, false);
+            if (currentRequest !== requestRef.current) return;
+            await applyPayload(l2, "progressive");
+          } finally {
+            window.clearTimeout(l2Deadline);
+          }
         } catch (l2Error) {
-          // L2 failure must not wipe L1; surface soft error only
           if (currentRequest !== requestRef.current) return;
           if (!(l2Error instanceof Error && l2Error.name === "AbortError")) {
             setError(l2Error instanceof Error ? l2Error.message : "L2 衍生品補齊失敗");
           }
+        }
+
+        // --- L3: candles for scanner + chart (required until TradingView owns the chart) ---
+        if (currentRequest !== requestRef.current) return;
+        setActiveTier({ l1: false, l2: false, l3: true });
+        setLoadStage("L3 圖表／策略 K 線載入中");
+        try {
+          const l3Controller = new AbortController();
+          bgAbortRef.current = l3Controller;
+          const l3Deadline = window.setTimeout(() => l3Controller.abort(), 22_000);
+          try {
+            const l3 = await fetchTier("l3", l3Controller.signal, false);
+            if (currentRequest !== requestRef.current) return;
+            await applyPayload(l3, "progressive");
+            if (!hasUsableCandles(l3) && !hasUsableCandles(dataRef.current ?? l3)) {
+              setError("K 線資料不足，機會掃描與圖表可能暫時空白");
+            }
+          } finally {
+            window.clearTimeout(l3Deadline);
+          }
+        } catch (l3Error) {
+          if (currentRequest !== requestRef.current) return;
+          if (!(l3Error instanceof Error && l3Error.name === "AbortError")) {
+            setError(l3Error instanceof Error ? l3Error.message : "L3 K 線載入失敗；價格／資金費仍可用");
+          }
         } finally {
-          window.clearTimeout(l2Deadline);
-          if (l2AbortRef.current === l2Controller) l2AbortRef.current = null;
-          setActiveTier((s) => ({ ...s, l2: false }));
+          if (bgAbortRef.current) bgAbortRef.current = null;
+          setActiveTier({ l1: false, l2: false, l3: false });
         }
       } catch (reason) {
         if (currentRequest !== requestRef.current) return;
@@ -170,7 +209,7 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
           } else {
             refreshingRef.current = false;
             setRefreshing(false);
-            setActiveTier({ l1: false, l2: false });
+            setActiveTier({ l1: false, l2: false, l3: false });
           }
         }
       }
@@ -181,7 +220,7 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
   const abortAllMarketRequests = useCallback(() => {
     normalAbortRef.current?.abort();
     forceAbortRef.current?.abort();
-    l2AbortRef.current?.abort();
+    bgAbortRef.current?.abort();
   }, []);
 
   const hydrateFromCache = useCallback(() => {

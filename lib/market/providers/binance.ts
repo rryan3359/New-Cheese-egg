@@ -106,14 +106,18 @@ export function binancePlanForTier(
   symbols: string[],
 ): BinanceFetchPlan {
   if (tier === "l1") {
+    // Critical path: bulk ticker + funding only
     return { symbols, fields: ["ticker", "funding"] };
   }
   if (tier === "l2") {
+    // Derivatives desk: OI / positioning, still no K (charts/strategies come from L3)
     return { symbols, fields: ["ticker", "funding", "oi", "positioning"] };
   }
+  // L3: short-depth candles for TerminalChart + strategy engine (TV migration later).
+  // Keep bulk ticker+funding so server-side strategy eval has funding; OI comes from L2 merge.
   return {
     symbols,
-    fields: ["ticker", "funding", "oi", "positioning", "candles"],
+    fields: ["ticker", "funding", "candles"],
     candleLimits: { ...CANDLE_LIMITS },
   };
 }

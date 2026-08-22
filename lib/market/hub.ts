@@ -36,14 +36,14 @@ const STALE_TTL_MS = 10 * 60_000;
 const BINANCE_DEADLINE_MS: Record<FetchTier, number> = {
   l1: 3_500,
   l2: 8_000,
-  l3: 12_000,
+  l3: 18_000,
 };
 const OKX_DEADLINE_MS: Record<FetchTier, number> = {
   l1: 3_500,
   l2: 10_000,
-  l3: 14_000,
+  l3: 16_000,
 };
-const OKX_FORCE_DEADLINE_MS = 28_000;
+const OKX_FORCE_DEADLINE_MS = 32_000;
 
 const fearSchema = z.object({
   data: z.array(
@@ -241,6 +241,7 @@ export async function buildMarketHub(
   const binancePlan = binancePlanForTier(tier, symbols);
 
   if (forceOkx) {
+    // Force path: L3 / full includes short candles so scanner + chart still work on pure OKX
     const plan =
       tier === "l1" ? okxL1Plan(symbols) : tier === "l2" ? okxL2Plan(symbols) : fullOkxFetchPlan();
     const [okxResult, fear] = await Promise.all([
