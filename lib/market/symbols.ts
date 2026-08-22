@@ -69,7 +69,10 @@ export const ASSET_NAMES: Record<string, string> = {
   ETC: "Ethereum Classic",
 };
 
-/** Priority order for progressive / first-paint loading (12–15 檔) */
+/**
+ * Priority order for progressive / first-paint loading (L1).
+ * Cockpit becomes usable once these have price + funding.
+ */
 export const PRIORITY_SYMBOLS = [
   "BTCUSDT",
   "ETHUSDT",
@@ -87,3 +90,14 @@ export const PRIORITY_SYMBOLS = [
   "NEARUSDT",
   "APTUSDT",
 ] as const;
+
+export type SymbolTier = "priority" | "core";
+
+export function symbolsForTier(tier: "l1" | "l2" | "l3"): string[] {
+  if (tier === "l1") return [...PRIORITY_SYMBOLS];
+  return [...CORE_SYMBOLS];
+}
+
+export function isPrioritySymbol(symbol: string): boolean {
+  return (PRIORITY_SYMBOLS as readonly string[]).includes(symbol);
+}

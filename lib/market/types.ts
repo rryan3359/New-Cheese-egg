@@ -1,7 +1,13 @@
 export const TIMEFRAMES = ["15m", "1h", "4h", "1d"] as const;
-export type Timeframe = typeof TIMEFRAMES[number];
+export type Timeframe = (typeof TIMEFRAMES)[number];
 export type DataState = "live" | "fallback" | "stale" | "missing";
 export type MetricSource = "Binance" | "OKX" | "Alternative.me" | "Calculated";
+
+/** Request tier for progressive loading */
+export type FetchTier = "l1" | "l2" | "l3";
+
+/** Field groups a provider may fetch */
+export type FieldGroup = "ticker" | "funding" | "oi" | "positioning" | "candles";
 
 export type Metric<T> = {
   value: T | null;
@@ -141,6 +147,12 @@ export type ProviderHealth = {
   errors: string[];
 };
 
+export type PipelineStage =
+  | "using-binance"
+  | "filling-from-okx"
+  | "using-okx-fallback"
+  | "showing-stale";
+
 export type MarketHubPayload = {
   success: boolean;
   updatedAt: string;
@@ -154,8 +166,9 @@ export type MarketHubPayload = {
   health: ProviderHealth[];
   recentErrors: string[];
   pipeline: {
-    stage: "using-binance" | "filling-from-okx" | "using-okx-fallback" | "showing-stale";
+    stage: PipelineStage;
     mode: "normal" | "force-okx";
+    tier: FetchTier;
     marketApiDurationMs: number;
     binanceDurationMs: number | null;
     okxDurationMs: number | null;
@@ -165,6 +178,11 @@ export type MarketHubPayload = {
 
 export type ProviderPayload = { assets: RawAsset[]; health: ProviderHealth };
 
+/**
+ * Unified fetch plan for both providers.
+ * - full: legacy / force path (all fields for symbols)
+ * - otherwise only listed symbols + field groups are fetched
+ */
 export type OkxFetchPlan = {
   full: boolean;
   symbols: string[];
@@ -174,3 +192,22 @@ export type OkxFetchPlan = {
   candleTimeframes: Partial<Record<string, Timeframe[]>>;
 };
 
+/** Binance-side plan (mirrors field groups; candles optional) */
+export type BinanceFetchPlan = {
+  symbols: string[];
+  fields: FieldGroup[];
+  /** Per-timeframe candle depth; only used when fields includes candles */
+  candleLimits?: Partial<Record<Timeframe, number>>;
+};
+
+/** Shorter defaults after TradingView takeover — strategy-oriented depth */
+export const CANDLE_LIMITS: Record<Timeframe, number> = {
+  "15m": 80,
+  "1h": 100,
+  "4h": 80,
+  "1d": 120,
+};
+
+export function emptyCandleMap(): CandleMap {
+  return { "15m": [], "1h": [], "4h": [], "1d": [] };
+}

@@ -61,7 +61,15 @@ function preferredSetup(strategies: StrategyResult[]) {
     .sort((a, b) => a.status === b.status ? b.confidence - a.confidence : a.status === "eligible" ? -1 : 1)[0] ?? null;
 }
 
-export function mergeProviderPayloads(input: { binance: ProviderPayload | null; okx: ProviderPayload | null; fearGreed: MarketHubPayload["fearGreed"]; fearHealth: MarketHubPayload["health"][number]; now?: string; staleTtlMs?: number; pipeline?: MarketHubPayload["pipeline"] }): MarketHubPayload {
+export function mergeProviderPayloads(input: {
+  binance: ProviderPayload | null;
+  okx: ProviderPayload | null;
+  fearGreed: MarketHubPayload["fearGreed"];
+  fearHealth: MarketHubPayload["health"][number];
+  now?: string;
+  staleTtlMs?: number;
+  pipeline?: MarketHubPayload["pipeline"];
+}): MarketHubPayload {
   const now = input.now ?? new Date().toISOString();
   const primaryMap = new Map((input.binance?.assets ?? []).map((asset) => [asset.symbol, asset]));
   const fallbackMap = new Map((input.okx?.assets ?? []).map((asset) => [asset.symbol, asset]));
@@ -83,7 +91,6 @@ export function mergeProviderPayloads(input: { binance: ProviderPayload | null; 
       position = positioningScore(topRatios, globalRatios);
       positionReason = null;
     } else if (globalRatios.length >= 5) {
-      // Simplified: z-score of log(global ratio) around its mean
       const logs = globalRatios.map((r) => Math.log(r));
       const avg = logs.reduce((s, v) => s + v, 0) / logs.length;
       const variance = logs.reduce((s, v) => s + (v - avg) ** 2, 0) / logs.length;
@@ -100,7 +107,22 @@ export function mergeProviderPayloads(input: { binance: ProviderPayload | null; 
       const state: DataState = primaryCandles.length ? "live" : fallbackCandles.length ? "fallback" : "missing";
       return [timeframe, buildTimeframe(timeframe, candles, source, state, primary?.latencyMs ?? fallback?.latencyMs ?? null, now)];
     })) as Record<Timeframe, TimeframeSnapshot>;
-    const strategies = TIMEFRAMES.flatMap((timeframe) => evaluateStrategies({ symbol, timeframe, candles: timeframes[timeframe].candles, funding: funding.value, oiChange1h: oiChange.value, topRatios, globalRatios, now }));
+    // Only evaluate strategies when at least one timeframe has candles (L3); otherwise empty + honest missing downstream
+    const hasAnyCandles = TIMEFRAMES.some((tf) => timeframes[tf].candles.length > 0);
+    const strategies = hasAnyCandles
+      ? TIMEFRAMES.flatMap((timeframe) =>
+          evaluateStrategies({
+            symbol,
+            timeframe,
+            candles: timeframes[timeframe].candles,
+            funding: funding.value,
+            oiChange1h: oiChange.value,
+            topRatios,
+            globalRatios,
+            now,
+          }),
+        )
+      : [];
     return {
       symbol, name: NAMES[symbol.replace("USDT", "")] ?? symbol,
       price: chooseMetric(primary?.price, fallback?.price, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Price unavailable", now),
@@ -131,20 +153,111 @@ export function mergeProviderPayloads(input: { binance: ProviderPayload | null; 
   }).slice(0, 8);
   const health = [input.binance?.health, input.okx?.health, input.fearHealth].filter((item): item is MarketHubPayload["health"][number] => Boolean(item));
   const recentErrors = health.flatMap((provider) => provider.errors.map((error) => `${provider.name}: ${error}`)).slice(0, 15);
-  return { success: true, updatedAt: now, cacheAgeMs: 0, staleExpiresAt: new Date(new Date(now).getTime() + (input.staleTtlMs ?? 10 * 60_000)).toISOString(), assets, fearGreed: input.fearGreed, breadth: { advancing, declining: assets.length - advancing, total: assets.length }, regime, riskAlerts, health, recentErrors, pipeline: input.pipeline ?? { stage: input.okx && !input.binance ? "using-okx-fallback" : input.okx ? "filling-from-okx" : "using-binance", mode: "normal", marketApiDurationMs: 0, binanceDurationMs: input.binance?.health.latencyMs ?? null, okxDurationMs: input.okx?.health.latencyMs ?? null, okxFetchedFields: [] } };
+  return {
+    success: true,
+    updatedAt: now,
+    cacheAgeMs: 0,
+    staleExpiresAt: new Date(new Date(now).getTime() + (input.staleTtlMs ?? 10 * 60_000)).toISOString(),
+    assets,
+    fearGreed: input.fearGreed,
+    breadth: { advancing, declining: assets.length - advancing, total: assets.length },
+    regime,
+    riskAlerts,
+    health,
+    recentErrors,
+    pipeline: input.pipeline ?? {
+      stage: input.okx && !input.binance ? "using-okx-fallback" : input.okx ? "filling-from-okx" : "using-binance",
+      mode: "normal",
+      tier: "l2",
+      marketApiDurationMs: 0,
+      binanceDurationMs: input.binance?.health.latencyMs ?? null,
+      okxDurationMs: input.okx?.health.latencyMs ?? null,
+      okxFetchedFields: [],
+    },
+  };
 }
 
 export function markPayloadStale(payload: MarketHubPayload, storedAt: number, now = Date.now(), ttlMs = 10 * 60_000) {
   if (now - storedAt > ttlMs) return null;
   const stale = structuredClone(payload);
-  stale.cacheAgeMs = now - storedAt; stale.updatedAt = new Date(now).toISOString(); stale.staleExpiresAt = new Date(storedAt + ttlMs).toISOString();
+  stale.cacheAgeMs = now - storedAt;
+  stale.updatedAt = new Date(now).toISOString();
+  stale.staleExpiresAt = new Date(storedAt + ttlMs).toISOString();
   stale.pipeline = { ...stale.pipeline, stage: "showing-stale" };
   for (const asset of stale.assets) {
-    const mark = (candidate: unknown) => { if (candidate && typeof candidate === "object" && "state" in candidate) { const value = candidate as Metric<unknown>; if (value.state !== "missing") { value.state = "stale"; value.reason = "顯示最後成功資料；主要與備援來源正在重試"; } } };
+    const mark = (candidate: unknown) => {
+      if (candidate && typeof candidate === "object" && "state" in candidate) {
+        const value = candidate as Metric<unknown>;
+        if (value.state !== "missing") {
+          value.state = "stale";
+          value.reason = "顯示最後成功資料；主要與備援來源正在重試";
+        }
+      }
+    };
     Object.values(asset).forEach(mark);
     TIMEFRAMES.forEach((timeframe) => Object.values(asset.timeframes[timeframe]).forEach(mark));
   }
-  if (stale.fearGreed.state !== "missing") { stale.fearGreed.state = "stale"; stale.fearGreed.reason = "顯示最後成功資料"; }
+  if (stale.fearGreed.state !== "missing") {
+    stale.fearGreed.state = "stale";
+    stale.fearGreed.reason = "顯示最後成功資料";
+  }
   return stale;
 }
 
+/**
+ * Prefer richer payload when merging L1 → L2 progressive updates on the client.
+ * Rule: keep non-missing field values from `next` when present; otherwise retain `prev`.
+ */
+export function mergeSnapshotsProgressive(prev: MarketHubPayload | null, next: MarketHubPayload): MarketHubPayload {
+  if (!prev) return next;
+  const prevMap = new Map(prev.assets.map((a) => [a.symbol, a]));
+  const nextMap = new Map(next.assets.map((a) => [a.symbol, a]));
+  const symbols = Array.from(new Set([...prevMap.keys(), ...nextMap.keys()]));
+
+  const pickMetric = <T,>(a: Metric<T> | undefined, b: Metric<T> | undefined): Metric<T> => {
+    if (b && b.state !== "missing" && b.value !== null && b.value !== undefined) return b;
+    if (a) return a;
+    return b as Metric<T>;
+  };
+
+  const assets = symbols.map((symbol) => {
+    const a = prevMap.get(symbol);
+    const b = nextMap.get(symbol);
+    if (!a) return b!;
+    if (!b) return a;
+    const timeframes = Object.fromEntries(
+      TIMEFRAMES.map((tf) => {
+        const ta = a.timeframes[tf];
+        const tb = b.timeframes[tf];
+        const candles = tb.candles.length ? tb.candles : ta.candles;
+        return [tf, candles === tb.candles ? tb : ta];
+      }),
+    ) as AssetSnapshot["timeframes"];
+    const strategies = b.strategies.length ? b.strategies : a.strategies;
+    return {
+      ...b,
+      price: pickMetric(a.price, b.price),
+      change15m: pickMetric(a.change15m, b.change15m),
+      change1h: pickMetric(a.change1h, b.change1h),
+      change4h: pickMetric(a.change4h, b.change4h),
+      change24h: pickMetric(a.change24h, b.change24h),
+      quoteVolume: pickMetric(a.quoteVolume, b.quoteVolume),
+      openInterest: pickMetric(a.openInterest, b.openInterest),
+      oiChange1h: pickMetric(a.oiChange1h, b.oiChange1h),
+      funding: pickMetric(a.funding, b.funding),
+      globalRatio: pickMetric(a.globalRatio, b.globalRatio),
+      topRatio: pickMetric(a.topRatio, b.topRatio),
+      positioning: pickMetric(a.positioning, b.positioning),
+      timeframes,
+      strategies,
+      setup: b.setup ?? a.setup,
+    };
+  });
+
+  return {
+    ...next,
+    assets,
+    fearGreed: pickMetric(prev.fearGreed, next.fearGreed),
+    breadth: next.breadth.total >= prev.breadth.total ? next.breadth : prev.breadth,
+  };
+}
