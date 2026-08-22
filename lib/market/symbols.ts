@@ -1,4 +1,6 @@
-/** Shared core perpetual symbols — keep Binance & OKX in sync. */
+/** Shared core perpetual symbols — keep Binance & OKX in sync.
+ *  ~30 high-liquidity USDT perps (by contract liquidity, not spot market-cap top 100).
+ */
 export const CORE_BASES = [
   "BTC",
   "ETH",
@@ -15,6 +17,21 @@ export const CORE_BASES = [
   "ATOM",
   "NEAR",
   "APT",
+  "ARB",
+  "OP",
+  "SUI",
+  "INJ",
+  "FIL",
+  "UNI",
+  "AAVE",
+  "PEPE",
+  "WIF",
+  "TIA",
+  "SEI",
+  "TON",
+  "TRX",
+  "BCH",
+  "ETC",
 ] as const;
 
 export const CORE_SYMBOLS = CORE_BASES.map((base) => `${base}USDT`);
@@ -35,7 +52,38 @@ export const ASSET_NAMES: Record<string, string> = {
   ATOM: "Cosmos",
   NEAR: "NEAR",
   APT: "Aptos",
+  ARB: "Arbitrum",
+  OP: "Optimism",
+  SUI: "Sui",
+  INJ: "Injective",
+  FIL: "Filecoin",
+  UNI: "Uniswap",
+  AAVE: "Aave",
+  PEPE: "Pepe",
+  WIF: "dogwifhat",
+  TIA: "Celestia",
+  SEI: "Sei",
+  TON: "Toncoin",
+  TRX: "TRON",
+  BCH: "Bitcoin Cash",
+  ETC: "Ethereum Classic",
 };
 
-/** Priority order for progressive / first-paint loading */
-export const PRIORITY_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"] as const;
+/** Priority order for progressive / first-paint loading (12–15 檔) */
+export const PRIORITY_SYMBOLS = [
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "BNBUSDT",
+  "XRPUSDT",
+  "DOGEUSDT",
+  "ADAUSDT",
+  "AVAXUSDT",
+  "LINKUSDT",
+  "DOTUSDT",
+  "SUIUSDT",
+  "ARBUSDT",
+  "OPUSDT",
+  "NEARUSDT",
+  "APTUSDT",
+] as const;

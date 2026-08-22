@@ -236,26 +236,87 @@ export function fundingMeanReversion(context: StrategyContext): StrategyResult {
 }
 
 export function positioningDivergence(context: StrategyContext): StrategyResult {
-  if (context.candles.length < 40 || context.topRatios.length < 5 || context.globalRatios.length < 5 || context.oiChange1h === null) return missingResult(context, "Positioning Divergence", ["candles", "Top Trader ratio", "Global ratio", "OI change"], 40);
+  const hasTopHistory = context.topRatios.length >= 5;
+  const hasGlobalHistory = context.globalRatios.length >= 5;
+  const hasAnyRatioHistory = hasTopHistory || hasGlobalHistory;
+
+  // 缺大戶多空歷史或全局歷史時，明確原因，不靜默失敗
+  if (context.candles.length < 40) {
+    return missingResult(context, "Positioning Divergence", ["candles", "多空比歷史", "OI change"], 40);
+  }
+  if (!hasAnyRatioHistory) {
+    return missingResult(context, "Positioning Divergence", ["缺大戶多空歷史／全局多空歷史", "OI change"], 40);
+  }
+  if (context.oiChange1h === null) {
+    return missingResult(context, "Positioning Divergence", ["OI change", hasTopHistory ? "Top ratio" : "Global ratio"], 40);
+  }
+
   const f = features(context);
   const priceChange = changeOver(context.candles, 5);
-  if (f.position === null || priceChange === null || f.currentAtr === null || f.price === null) return missingResult(context, "Positioning Divergence", ["candles", "Positioning score", "OI change", "ATR"], 40);
-  const longDivergence = priceChange > .4 && f.position < -35;
-  const shortDivergence = priceChange < -.4 && f.position > 35;
+  if (f.position === null || priceChange === null || f.currentAtr === null || f.price === null) {
+    const missingBits = [
+      f.position === null ? (hasTopHistory ? "Positioning score" : "僅 OKX global，簡化分數不可用") : null,
+      priceChange === null ? "價格變化" : null,
+      f.currentAtr === null ? "ATR" : null,
+    ].filter(Boolean) as string[];
+    return missingResult(context, "Positioning Divergence", missingBits.length ? missingBits : ["Positioning score", "OI change", "ATR"], 40);
+  }
+
+  const longDivergence = priceChange > 0.4 && f.position < -35;
+  const shortDivergence = priceChange < -0.4 && f.position > 35;
   const direction: Direction = longDivergence ? "Long" : shortDivergence ? "Short" : "Neutral";
   const extreme = Math.abs(f.position) >= 35;
   const oiConfirm = context.oiChange1h > 0;
+  const dualRatioOk = hasTopHistory && hasGlobalHistory;
+
+  // 僅 OKX global 簡化 positioning：可進入 waiting，禁止無完整資料硬湊 eligible
   const conditions: Condition[] = [
-    { label: "Top／Global 帳戶傾向分數達 ±35", met: extreme, weight: 30, required: true },
+    { label: "帳戶傾向分數達 ±35", met: extreme, weight: 30, required: true },
     { label: "價格與 positioning 形成背離", met: longDivergence || shortDivergence, weight: 34 },
     { label: "OI 正向增加確認新部位", met: oiConfirm, weight: 22, required: true },
-    { label: "至少五筆 ratio 歷史可標準化", met: context.topRatios.length >= 5 && context.globalRatios.length >= 5, weight: 14, required: true },
+    {
+      label: dualRatioOk ? "至少五筆 Top／Global ratio 歷史可標準化" : "僅 OKX global 簡化傾向（缺大戶多空歷史）",
+      met: dualRatioOk,
+      weight: 14,
+      required: true,
+    },
   ];
-  const status: StrategyStatus = direction !== "Neutral" && oiConfirm ? "eligible" : extreme ? "waiting" : "invalid";
+
+  let status: StrategyStatus;
+  if (dualRatioOk && direction !== "Neutral" && oiConfirm) {
+    status = "eligible";
+  } else if (extreme || (hasAnyRatioHistory && f.position !== null)) {
+    // 有真實多空資料但條件未齊 → waiting；僅 global 時也允許 waiting
+    status = "waiting";
+  } else {
+    status = "invalid";
+  }
+
   const bounds = rollingBounds(context.candles, 20);
   const pendingDirection: Direction = direction !== "Neutral" ? direction : f.position < 0 ? "Long" : "Short";
   const stopBase = pendingDirection === "Long" ? bounds?.low ?? null : bounds?.high ?? null;
-  return result({ context, strategy: "Positioning Divergence", direction: pendingDirection, status, conditions, tradePlan: plan(pendingDirection, f.price, stopBase, f.currentAtr), trigger: "價格、OI 與 Top／Global 帳戶多空傾向出現可量化背離", invalidation: "Positioning 回到中性或 OI 下降，背離不再成立", reasons: [`Positioning ${f.position}（交易所帳戶多空傾向，非真實持倉集中度）`, `價格 5 bars ${priceChange.toFixed(2)}%`], requiredData: ["candles", "Top Trader ratio", "Global ratio", "rolling Z-score", "OI change"] });
+  const reasonParts = [
+    `Positioning ${f.position}（交易所帳戶多空傾向，非真實持倉集中度）`,
+    `價格 5 bars ${priceChange.toFixed(2)}%`,
+  ];
+  if (!dualRatioOk) {
+    reasonParts.push("僅 OKX global 簡化 positioning，缺大戶多空歷史 → 不進入可規劃");
+  }
+
+  return result({
+    context,
+    strategy: "Positioning Divergence",
+    direction: pendingDirection,
+    status,
+    conditions,
+    tradePlan: plan(pendingDirection, f.price, stopBase, f.currentAtr),
+    trigger: "價格、OI 與帳戶多空傾向出現可量化背離",
+    invalidation: "Positioning 回到中性或 OI 下降，背離不再成立",
+    reasons: reasonParts,
+    requiredData: dualRatioOk
+      ? ["candles", "Top Trader ratio", "Global ratio", "rolling Z-score", "OI change"]
+      : ["candles", "Global ratio（OKX）", "OI change"],
+  });
 }
 
 export function ictLiquiditySweep(context: StrategyContext): StrategyResult {

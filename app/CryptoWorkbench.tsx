@@ -50,8 +50,6 @@ export default function CryptoWorkbench() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("light");
-  const [statusOpen, setStatusOpen] = useState(false);
-  const [hideStatusDetails, setHideStatusDetails] = useState(false);
 
   const {
     persistence,
@@ -117,7 +115,6 @@ export default function CryptoWorkbench() {
     const hash = window.location.hash.slice(1);
     const collapsed = parseStored<boolean>(storageKeys.sidebar, false);
     const savedTheme = localStorage.getItem(storageKeys.theme) === "dark" ? "dark" : "light";
-    const hideDetails = localStorage.getItem("cheese-egg:hide-status-details") === "1";
     document.documentElement.dataset.theme = savedTheme;
 
     queueMicrotask(() => {
@@ -130,7 +127,6 @@ export default function CryptoWorkbench() {
       setSettings(localSettings);
       setSidebarCollapsed(collapsed);
       setTheme(savedTheme);
-      setHideStatusDetails(hideDetails);
       setHydrated(true);
     });
 
@@ -196,7 +192,6 @@ export default function CryptoWorkbench() {
   }, [data, error]);
 
   const activeLabel = navigation.find((item) => item.id === activeView)?.label ?? "市場駕駛艙";
-  const healthLabel = healthTone === "live" ? "即時" : healthTone === "fallback" ? "備援" : "稍早資料";
   const updatedAt = data ? new Date(data.updatedAt).toLocaleTimeString("zh-TW", { hour12: false }) : "—";
   const warningCount = data?.health.filter((provider) => provider.state === "missing" || provider.state === "fallback").length ?? 0;
   const triggeredCount = alerts.filter((alert) => alert.currentStatus === "triggered").length;
@@ -284,21 +279,14 @@ export default function CryptoWorkbench() {
       <section className="workbench-main">
         <Topbar
           activeLabel={activeLabel}
-          healthTone={healthTone}
-          healthLabel={healthLabel}
-          assetCount={data?.assets.length ?? 0}
           persistenceLabel={persistence === "d1" ? "私人同步" : "此裝置"}
           updatedAt={updatedAt}
           theme={theme}
           refreshing={refreshing}
           fallbackTesting={fallbackTesting}
-          loadStage={loadStage}
           loading={loading}
-          estimatedSeconds={loading || refreshing ? (data ? 3 : 8) : null}
           onToggleTheme={toggleTheme}
           onRefresh={() => void refresh()}
-          statusOpen={statusOpen}
-          onToggleStatus={() => setStatusOpen((v) => !v)}
         />
         <PriceTicker data={data} onSelect={(symbol) => openChart(symbol)} />
         <div className="workbench-content">
@@ -313,14 +301,8 @@ export default function CryptoWorkbench() {
             onDismissToast={(id) => setToasts((current) => current.filter((item) => item.id !== id))}
             onRefresh={() => void refresh()}
             onNavigate={navigate}
-            hideStatusDetails={hideStatusDetails}
-            statusOpen={statusOpen}
-            onToggleStatus={() => setStatusOpen(false)}
-            onHideStatusDetails={() => {
-              setHideStatusDetails(true);
-              setStatusOpen(false);
-              localStorage.setItem("cheese-egg:hide-status-details", "1");
-            }}
+            hideStatusDetails
+            statusOpen={false}
           />
           {renderView()}
           <footer className="workbench-footer">

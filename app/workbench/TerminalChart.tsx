@@ -189,9 +189,6 @@ export default function TerminalChart({ asset, timeframe, setup, layers, theme =
         ctx.fill();
       }
 
-      ctx.fillStyle = palette.label;
-      ctx.font = "11px monospace";
-      ctx.fillText(`${candles.length} × ${timeframe.toUpperCase()} · ${asset.price.source} · FVG unavailable from aggregate candles`, 8, height - 9);
     };
 
     const schedule = () => {

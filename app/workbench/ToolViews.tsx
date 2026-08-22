@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { calculateJournalAnalytics } from "../../lib/journal/analytics";
 import { TIMEFRAMES, type MarketHubPayload, type StrategyName, type Timeframe } from "../../lib/market/types";
-import { calculatePosition } from "../../lib/risk/calculator";
+import { calculateAllocation } from "../../lib/risk/calculator";
 import { prioritizeByWatchlist } from "../../lib/workbench/watchlist";
 import type { AlertEvent, AlertRule, AlertType, JournalEntry, WorkbenchSettings } from "./types";
 import { formatPrice, ViewTitle } from "./MarketViews";
@@ -37,32 +37,112 @@ export function AlertsView({ data, alerts, events, watchlist, persistence, onUps
   };
   const enableBrowser = async () => { if ("Notification" in window) await Notification.requestPermission(); };
   return <div className="view-stack"><ViewTitle eyebrow="ALERT CENTER" title="只在條件真的完成時打擾你。" copy="頁面開啟時會跟著行情檢查；同一條件在你設定的時間內只提醒一次。" />
-    <div className="data-banner warning-banner"><span>!</span><p><b>僅分頁開啟時評估，不是 24/7</b>外部 cron 可呼叫 <code>/api/alerts/evaluate</code>。Telegram 需設定伺服器環境變數 <code>TELEGRAM_BOT_TOKEN</code> 與 <code>TELEGRAM_CHAT_ID</code>；未設定不會顯示假成功。</p></div>
-    <section className="tool-split"><article className="terminal-panel form-panel"><div className="panel-heading"><div><p>NEW ALERT</p><h2>建立條件警報</h2></div><span>{persistence === "d1" ? "私人同步" : "保存在此裝置"}</span></div><div className="form-grid two-column"><label>幣種<select value={symbol} onChange={(event) => { const next = event.target.value; setSymbol(next); setThreshold(data.assets.find((asset) => asset.symbol === next)?.price.value ?? 0); }}>{symbolOptions.map((asset) => <option key={asset.symbol} value={asset.symbol}>{watchlist.includes(asset.symbol) ? `★ ${asset.symbol}` : asset.symbol}</option>)}</select></label><label>條件<select value={type} onChange={(event) => setType(event.target.value as AlertType)}>{Object.entries(alertLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label><label>週期<select value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe)}>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select></label><label>運算<select value={operator} onChange={(event) => setOperator(event.target.value as "above" | "below" | "inside")}><option value="above">高於／突破</option><option value="below">低於／跌破</option><option value="inside">進入區間</option></select></label>{["strategy_eligible", "risk_reward"].includes(type) && <label>策略<select value={strategy} onChange={(event) => setStrategy(event.target.value as StrategyName)}>{strategyNames.map((item) => <option key={item}>{item}</option>)}</select></label>}<label>{type === "funding" ? "資金費率門檻 %" : type === "risk_reward" ? "最低報酬風險比" : "門檻"}<input type="number" step="any" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} /></label>{type === "price_range" && <label>區間上限<input type="number" value={thresholdUpper ?? ""} onChange={(event) => setThresholdUpper(event.target.value ? Number(event.target.value) : null)} /></label>}<label>多久後可再次提醒（分鐘）<input type="number" min="0" value={cooldownMinutes} onChange={(event) => setCooldownMinutes(Number(event.target.value))} /></label></div><button className="primary-terminal-button" type="button" onClick={addAlert}>建立警報 <span>＋</span></button><div className="notification-options"><button type="button" onClick={enableBrowser}>啟用瀏覽器通知</button><span>站內通知 · 可用</span><span className="muted">Telegram · 需伺服器 TOKEN／CHAT_ID</span></div></article>
+    <div className="data-banner warning-banner"><span>!</span><p><b>僅分頁開啟時評估</b>外部 cron 可呼叫 <code>/api/alerts/evaluate</code>。本輪不實作 Telegram 推送。</p></div>
+    <section className="tool-split"><article className="terminal-panel form-panel"><div className="panel-heading"><div><p>NEW ALERT</p><h2>建立條件警報</h2></div><span>{persistence === "d1" ? "私人同步" : "保存在此裝置"}</span></div><div className="form-grid two-column"><label>幣種<select value={symbol} onChange={(event) => { const next = event.target.value; setSymbol(next); setThreshold(data.assets.find((asset) => asset.symbol === next)?.price.value ?? 0); }}>{symbolOptions.map((asset) => <option key={asset.symbol} value={asset.symbol}>{watchlist.includes(asset.symbol) ? `★ ${asset.symbol}` : asset.symbol}</option>)}</select></label><label>條件<select value={type} onChange={(event) => setType(event.target.value as AlertType)}>{Object.entries(alertLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label><label>週期<select value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe)}>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select></label><label>運算<select value={operator} onChange={(event) => setOperator(event.target.value as "above" | "below" | "inside")}><option value="above">高於／突破</option><option value="below">低於／跌破</option><option value="inside">進入區間</option></select></label>{["strategy_eligible", "risk_reward"].includes(type) && <label>策略<select value={strategy} onChange={(event) => setStrategy(event.target.value as StrategyName)}>{strategyNames.map((item) => <option key={item}>{item}</option>)}</select></label>}<label>{type === "funding" ? "資金費率門檻 %" : type === "risk_reward" ? "最低報酬風險比" : "門檻"}<input type="number" step="any" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} /></label>{type === "price_range" && <label>區間上限<input type="number" value={thresholdUpper ?? ""} onChange={(event) => setThresholdUpper(event.target.value ? Number(event.target.value) : null)} /></label>}<label>多久後可再次提醒（分鐘）<input type="number" min="0" value={cooldownMinutes} onChange={(event) => setCooldownMinutes(Number(event.target.value))} /></label></div><button className="primary-terminal-button" type="button" onClick={addAlert}>建立警報 <span>＋</span></button><div className="notification-options"><button type="button" onClick={enableBrowser}>啟用瀏覽器通知</button><span>站內通知 · 可用</span></div></article>
       <article className="terminal-panel alert-context"><div className="panel-heading"><div><p>ALERT PREVIEW</p><h2>這個警報會怎麼判斷</h2></div></div><dl><div><dt>幣種／週期</dt><dd>{symbol} · {timeframe}</dd></div><div><dt>觸發原因</dt><dd>{alertLabels[type]}</dd></div><div><dt>現價</dt><dd>{formatPrice(current)}</dd></div><div><dt>門檻</dt><dd>{threshold}{thresholdUpper !== null ? `–${thresholdUpper}` : ""}</dd></div><div><dt>再次提醒</dt><dd>{cooldownMinutes} 分鐘內不重複</dd></div><div><dt>行情時間</dt><dd>{new Date(data.updatedAt).toLocaleTimeString("zh-TW")}</dd></div></dl></article></section>
     <section className="terminal-panel"><div className="panel-heading"><div><p>ACTIVE RULES</p><h2>{alerts.length} 個警報規則</h2></div><span>{persistence === "d1" ? "私人同步" : "保存在此裝置"}</span></div><div className="alert-list">{alerts.length ? alerts.map((alert) => <div key={alert.id}><button aria-label={alert.enabled ? "停用警報" : "啟用警報"} className={alert.enabled ? "toggle on" : "toggle"} type="button" onClick={() => onUpsert({ ...alert, enabled: !alert.enabled, currentStatus: alert.enabled ? "disabled" : "watching" })}><i /></button><b>{alert.symbol.replace("USDT", "")} · {alert.timeframe}</b><span>{alertLabels[alert.type]}</span><em><span className={`metric-state ${alert.currentStatus}`}>{alertStatusLabels[alert.currentStatus] ?? alert.currentStatus}</span></em><small>{alert.lastReason}</small><button aria-label="刪除警報" className="delete-rule" type="button" onClick={() => onDelete(alert.id)}>×</button></div>) : <div className="inline-empty">還沒有警報。從上方建立第一個條件。</div>}</div></section>
     <section className="terminal-panel"><div className="panel-heading"><div><p>EVENT HISTORY</p><h2>最近觸發</h2></div><span>{events.length} 筆</span></div><div className="journal-table">{events.length ? events.slice(0, 30).map((event) => <div key={event.id}><span><b>{event.symbol.replace("USDT", "")}</b><small>{new Date(event.triggeredAt).toLocaleString("zh-TW")}</small></span><span>{event.reason}</span><span>{event.value ?? "—"}</span><span className="positive">{channelLabels[event.channel] ?? event.channel}</span><span>{deliveryLabels[event.deliveryStatus] ?? event.deliveryStatus}</span></div>) : <div className="inline-empty">尚無觸發事件。</div>}</div></section>
   </div>;
 }
 
-export function RiskView({ data, settings, journal }: { data: MarketHubPayload; settings: WorkbenchSettings; journal: JournalEntry[] }) {
-  const btc = data.assets.find((asset) => asset.symbol === "BTCUSDT")?.price.value ?? 0;
-  const [balance, setBalance] = useState(10_000);
-  const [riskPercent, setRiskPercent] = useState(settings.defaultRiskPercent);
-  const [entry, setEntry] = useState(btc);
-  const [stop, setStop] = useState(btc * .985);
-  const [side, setSide] = useState<"Long" | "Short">("Long");
-  const [leverage, setLeverage] = useState(3);
-  const [feeRate, setFeeRate] = useState(settings.defaultFeeRate);
-  const plan = calculatePosition({ balance, riskPercent, entry, stop, side, leverage, feeRate });
-  const today = new Date().toISOString().slice(0, 10);
-  const todayPnl = journal.filter((item) => item.tradeDate === today).reduce((sum, item) => sum + item.actualPnl, 0);
-  const remaining = Math.max(0, settings.dailyLossLimit + Math.min(0, todayPnl));
-  return <div className="view-stack"><ViewTitle eyebrow="RISK MANAGER" title="先算最壞情況，再談獲利。" copy="倉位把來回手續費算入最大損失；槓桿只影響保證金，不會降低實際風險。" />
-    <section className="risk-calculator"><article className="terminal-panel calculator-input"><div className="panel-heading"><div><p>POSITION SIZE</p><h2>倉位計算器</h2></div></div><div className="form-grid two-column"><label>帳戶資金 USDT<input type="number" value={balance} onChange={(event) => setBalance(Number(event.target.value))} /></label><label>單筆風險 %<input type="number" step="0.1" value={riskPercent} onChange={(event) => setRiskPercent(Number(event.target.value))} /></label><label>方向<select value={side} onChange={(event) => setSide(event.target.value as "Long" | "Short")}><option>Long</option><option>Short</option></select></label><label>進場價<input type="number" value={entry} onChange={(event) => setEntry(Number(event.target.value))} /></label><label>停損價<input type="number" value={stop} onChange={(event) => setStop(Number(event.target.value))} /></label><label>槓桿<select value={leverage} onChange={(event) => setLeverage(Number(event.target.value))}>{[1,2,3,5,10,20].map((item) => <option key={item} value={item}>{item}×</option>)}</select></label><label>單邊手續費率<input type="number" step="0.0001" value={feeRate} onChange={(event) => setFeeRate(Number(event.target.value))} /></label></div><div className="liquidation-note"><span>!</span> 清算價不是停損；{plan.reason ?? "實際滑價與資金費率仍需另外預留。"}</div></article>
-      <article className="terminal-panel calculator-output"><div className="panel-heading"><div><p>CALCULATED PLAN</p><h2>建議倉位</h2></div><span className={plan.valid ? "positive" : "negative"}>{side.toUpperCase()} · {riskPercent.toFixed(1)}% RISK</span></div><strong>{plan.valid ? plan.quantity.toFixed(5) : "—"} BTC</strong><p>名目價值 {formatPrice(plan.valid ? plan.notional : null)}</p><div className="output-grid"><span>最大虧損<b className="negative">{formatPrice(plan.valid ? plan.maxLoss : null)}</b></span><span>含費風險<b>{formatPrice(plan.valid ? plan.riskAfterFees : null)}</b></span><span>預估來回費用<b>{formatPrice(plan.valid ? plan.estimatedFees : null)}</b></span><span>保證金需求<b>{formatPrice(plan.valid ? plan.margin : null)}</b></span></div>{plan.leverageWarning && <div className="liquidation-note"><span>!</span>{plan.leverageWarning}</div>}<div className="target-table">{plan.targets.map((target) => <div key={target.multiple}><span>TP {target.multiple}R</span><b>{formatPrice(target.price)}</b><em>淨利 {formatPrice(target.netPnl)}</em></div>)}</div></article></section>
-    <section className="daily-risk-grid"><article><span>今日已實現</span><b className={todayPnl >= 0 ? "positive" : "negative"}>{formatPrice(todayPnl)}</b><small>{journal.filter((item) => item.tradeDate === today).length} 筆今日交易</small></article><article><span>剩餘可承擔風險</span><b>{formatPrice(remaining)}</b><small>每日上限 {formatPrice(settings.dailyLossLimit)}</small></article><article><span>同方向曝險</span><b>未連接交易帳戶</b><small>沒有資料時不會顯示成零</small></article><article><span>高相關性提醒</span><b className="warning">BTC / ETH / SOL</b><small>同方向持倉可能一起放大虧損</small></article></section>
-  </div>;
+export function RiskView({ settings }: { data: MarketHubPayload; settings: WorkbenchSettings; journal: JournalEntry[] }) {
+  const [totalCapital, setTotalCapital] = useState(10_000);
+  const [contractRatioPercent, setContractRatioPercent] = useState(30);
+  const [slots, setSlots] = useState(5);
+  const [perTradeStopPercent, setPerTradeStopPercent] = useState(settings.defaultRiskPercent || 1);
+  const [dailyStopPercent, setDailyStopPercent] = useState(3);
+  const [rewardRisk, setRewardRisk] = useState(2);
+  const plan = calculateAllocation({
+    totalCapital,
+    contractRatioPercent,
+    slots,
+    perTradeStopPercent,
+    dailyStopPercent,
+    rewardRisk,
+  });
+  const fmt = (v: number | null) => (v === null || !Number.isFinite(v) ? "—" : formatPrice(v));
+  return (
+    <div className="view-stack">
+      <ViewTitle eyebrow="RISK MANAGER" title="加密合約分倉試算" copy="依總資金與風險比例，算出合約帳戶、分倉保證金與單筆／當日止損上限。缺值顯示「—」。" />
+      <section className="risk-calculator">
+        <article className="terminal-panel calculator-input">
+          <div className="panel-heading">
+            <div>
+              <p>輸入參數</p>
+              <h2>分倉試算設定</h2>
+            </div>
+          </div>
+          <div className="form-grid two-column">
+            <label>
+              總資金 (U)
+              <input type="number" min="0" step="100" value={totalCapital} onChange={(e) => setTotalCapital(Number(e.target.value))} />
+            </label>
+            <label>
+              合約帳戶比例 (%)
+              <input type="number" min="1" max="100" step="1" value={contractRatioPercent} onChange={(e) => setContractRatioPercent(Number(e.target.value))} />
+            </label>
+            <label>
+              分倉數
+              <input type="number" min="1" step="1" value={slots} onChange={(e) => setSlots(Math.max(1, Math.floor(Number(e.target.value) || 1)))} />
+            </label>
+            <label>
+              單筆止損 %（佔總資金）
+              <input type="number" min="0.1" max="20" step="0.1" value={perTradeStopPercent} onChange={(e) => setPerTradeStopPercent(Number(e.target.value))} />
+            </label>
+            <label>
+              當日止損 %（佔總資金）
+              <input type="number" min="0.1" max="50" step="0.1" value={dailyStopPercent} onChange={(e) => setDailyStopPercent(Number(e.target.value))} />
+            </label>
+            <label>
+              獲利目標 RR
+              <input type="number" min="0.25" step="0.25" value={rewardRisk} onChange={(e) => setRewardRisk(Number(e.target.value))} />
+            </label>
+          </div>
+          {plan.reason && (
+            <div className="liquidation-note">
+              <span>!</span>
+              {plan.reason}
+            </div>
+          )}
+        </article>
+        <article className="terminal-panel calculator-output">
+          <div className="panel-heading">
+            <div>
+              <p>試算結果</p>
+              <h2>分倉與風險上限</h2>
+            </div>
+            <span className={plan.valid ? "positive" : "negative"}>{plan.valid ? "有效" : "無效"}</span>
+          </div>
+          <div className="output-grid">
+            <span>
+              合約帳戶資金
+              <b>{fmt(plan.valid ? plan.contractCapital : null)}</b>
+            </span>
+            <span>
+              現貨／備用金
+              <b>{fmt(plan.valid ? plan.spotReserve : null)}</b>
+            </span>
+            <span>
+              單筆保證金
+              <b>{fmt(plan.valid ? plan.marginPerSlot : null)}</b>
+            </span>
+            <span>
+              單筆最大虧損
+              <b className="negative">{fmt(plan.valid ? plan.maxLossPerTrade : null)}</b>
+            </span>
+            <span>
+              當日止損上限
+              <b className="negative">{fmt(plan.valid ? plan.dailyLossLimit : null)}</b>
+            </span>
+            <span>
+              單筆獲利目標
+              <b className="positive">{fmt(plan.valid ? plan.profitTargetPerTrade : null)}</b>
+            </span>
+          </div>
+        </article>
+      </section>
+    </div>
+  );
 }
 
 export function JournalView({ journal, persistence, onUpsert, onDelete }: { journal: JournalEntry[]; persistence: "d1" | "device"; onUpsert: (entry: JournalEntry) => void; onDelete: (id: string) => void }) {
@@ -83,7 +163,7 @@ export function JournalView({ journal, persistence, onUpsert, onDelete }: { jour
   return <div className="view-stack"><section className="view-title with-action"><div><p>TRADING JOURNAL</p><h1>把交易變成可以改進的資料。</h1><span>{persistence === "d1" ? "交易紀錄已開啟私人同步；我們不會要求你的交易所金鑰。" : "交易紀錄會保存在這台裝置；我們不會要求你的交易所金鑰。"}</span></div><button className="primary-terminal-button" type="button" onClick={() => setShowForm(!showForm)}>新增交易 ＋</button></section>
     {showForm && <section className="terminal-panel journal-form"><div className="form-grid journal-fields"><label>幣種<input value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value.toUpperCase() })} /></label><label>方向<select value={draft.side} onChange={(event) => setDraft({ ...draft, side: event.target.value as "Long" | "Short" })}><option>Long</option><option>Short</option></select></label><label>策略<select value={draft.strategy} onChange={(event) => setDraft({ ...draft, strategy: event.target.value as StrategyName })}>{strategyNames.map((item) => <option key={item}>{item}</option>)}</select></label><label>週期<select value={draft.timeframe} onChange={(event) => setDraft({ ...draft, timeframe: event.target.value as Timeframe })}>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select></label><label>交易日期<input type="date" value={draft.tradeDate} onChange={(event) => setDraft({ ...draft, tradeDate: event.target.value })} /></label><label>數量<input type="number" step="any" value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: Number(event.target.value) })} /></label><label>進場<input type="number" value={draft.entry || ""} onChange={(event) => setDraft({ ...draft, entry: Number(event.target.value) })} /></label><label>停損<input type="number" value={draft.stop || ""} onChange={(event) => setDraft({ ...draft, stop: Number(event.target.value) })} /></label><label>目標<input type="number" value={draft.target || ""} onChange={(event) => setDraft({ ...draft, target: Number(event.target.value) })} /></label><label>實際出場<input type="number" value={draft.exit || ""} onChange={(event) => setDraft({ ...draft, exit: Number(event.target.value) })} /></label><label>手續費<input type="number" step="any" value={draft.fees} onChange={(event) => setDraft({ ...draft, fees: Number(event.target.value) })} /></label><label>Funding 成本<input type="number" step="any" value={draft.fundingCost} onChange={(event) => setDraft({ ...draft, fundingCost: Number(event.target.value) })} /></label><label className="wide-field">進場原因<textarea value={draft.reason} onChange={(event) => setDraft({ ...draft, reason: event.target.value })} /></label><label>是否遵守策略<select value={draft.followed ? "是" : "否"} onChange={(event) => setDraft({ ...draft, followed: event.target.value === "是" })}><option>是</option><option>否</option></select></label><label>犯錯分類<select value={draft.mistake} onChange={(event) => setDraft({ ...draft, mistake: event.target.value })}>{["無","追價","提前進場","移動停損","過度槓桿","報復交易"].map((item) => <option key={item}>{item}</option>)}</select></label><label className="wide-field">圖表註記／截圖連結<textarea value={draft.chartNote} onChange={(event) => setDraft({ ...draft, chartNote: event.target.value })} /></label><label className="wide-field">復盤筆記<textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label></div><button className="primary-terminal-button" type="button" onClick={addEntry}>儲存交易</button></section>}
     <section className="journal-stats"><article><span>勝率</span><b>{analytics.winRate === null ? "—" : `${analytics.winRate.toFixed(1)}%`}</b></article><article><span>獲利因子</span><b>{analytics.profitFactor === null ? "—" : analytics.profitFactor.toFixed(2)}</b></article><article><span>平均 R</span><b className={(analytics.averageR ?? 0) >= 0 ? "positive" : "negative"}>{analytics.averageR === null ? "—" : `${analytics.averageR.toFixed(2)}R`}</b></article><article><span>最大回撤</span><b>{analytics.maxDrawdown === null ? "—" : formatPrice(analytics.maxDrawdown)}</b></article><article><span>最大連敗</span><b>{analytics.maxLosingStreak}</b></article><article><span>累計淨損益</span><b className={analytics.totalPnl >= 0 ? "positive" : "negative"}>{formatPrice(analytics.totalPnl)}</b></article></section>
-    <section className="terminal-panel"><div className="panel-heading"><div><p>PERFORMANCE BREAKDOWN</p><h2>哪些做法真的有效</h2></div><span>只計算已完成交易</span></div><div className="breakdown-grid">{[{ title: "策略", rows: analytics.byStrategy }, { title: "方向", rows: analytics.bySide }, { title: "週期", rows: analytics.byTimeframe }, { title: "紀律", rows: analytics.byDiscipline }].map((group) => <div key={group.title}><b>{group.title}</b>{group.rows.length ? group.rows.map((row) => <span key={row.label}>{row.label}<em>{row.trades} 筆 · {row.averageR?.toFixed(2) ?? "—"}R · {formatPrice(row.totalPnl)}</em></span>) : <small>尚無資料</small>}</div>)}</div></section>
+    <section className="terminal-panel"><div className="panel-heading"><div><p>績效拆解</p><h2>哪些做法真的有效</h2></div><span>只計算已完成交易</span></div><div className="breakdown-grid">{[{ title: "策略", rows: analytics.byStrategy }, { title: "方向", rows: analytics.bySide }, { title: "週期", rows: analytics.byTimeframe }, { title: "紀律", rows: analytics.byDiscipline }].map((group) => <div key={group.title}><b>{group.title}</b>{group.rows.length ? group.rows.map((row) => <span key={row.label}>{row.label}<em>{row.trades} 筆 · {row.averageR?.toFixed(2) ?? "—"}R · {formatPrice(row.totalPnl)}</em></span>) : <small>尚無資料</small>}</div>)}</div></section>
     <section className="terminal-panel"><div className="panel-heading"><div><p>TRADE LOG</p><h2>最近交易</h2></div><span>{persistence === "d1" ? "私人同步" : "保存在此裝置"}</span></div><div className="journal-table">{journal.length ? journal.map((entry) => <div key={entry.id}><span><b>{entry.symbol}</b><small>{entry.strategy} · {entry.timeframe} · {entry.tradeDate}</small></span><span className={`direction ${entry.side.toLowerCase()}`}>{entry.side}</span><span><b>{formatPrice(entry.entry)}</b><small>→ {formatPrice(entry.exit)}</small></span><span className={entry.rMultiple >= 0 ? "positive" : "negative"}>{entry.rMultiple.toFixed(2)}R · {formatPrice(entry.actualPnl)}</span><span>{entry.followed ? "有遵守" : entry.mistake}</span><button aria-label="刪除交易" type="button" onClick={() => onDelete(entry.id)}>×</button></div>) : <div className="inline-empty">尚無交易紀錄。先記錄一筆真實交易，統計才會開始。</div>}</div></section>
   </div>;
 }

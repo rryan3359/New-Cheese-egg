@@ -797,3 +797,50 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
 /* Hide legacy full-width load-stage if any residual */
 .load-stage { display: none !important; }
 .fallback-banner, .persistence-banner { display: none !important; }
+
+/* —— 正式改動：長列表內滾、約 10 列可视 —— */
+.scanner-table {
+  max-height: calc(10 * 52px + 44px);
+  overflow-y: auto;
+  overflow-x: auto;
+}
+.position-table {
+  max-height: calc(12 * 44px + 40px);
+  overflow-y: auto;
+  overflow-x: auto;
+}
+.strategy-desk {
+  max-height: none;
+}
+.strategy-desk .strategy-results,
+.strategy-desk .eligible-list,
+.strategy-scroll-list {
+  max-height: calc(10 * 56px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 績效拆解：防止文字溢出小卡 */
+.breakdown-grid > div {
+  min-width: 0;
+  overflow: hidden;
+}
+.breakdown-grid span {
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.breakdown-grid em {
+  white-space: normal;
+  word-break: break-word;
+}
+.panel-heading p {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 頂欄狀態徽章已移除，殘留樣式不佔位 */
+.status-badge { display: none !important; }
+.watchlist-priority { display: none !important; }
