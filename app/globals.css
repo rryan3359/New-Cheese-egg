@@ -1079,22 +1079,23 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
 .status-badge { display: none !important; }
 .watchlist-priority { display: none !important; }
 
-/* ── Decision view: Trade Plan + TradingView (v2) ── */
+/* ── Decision view: TradingView (main) + Trade Plan (side) ── */
 .decision-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  /* TV first (larger), plan card second */
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   gap: 14px;
   align-items: start;
+}
+.decision-tv-panel {
+  min-width: 0;
+  padding: 12px 14px 10px;
 }
 .decision-plan-card {
   position: sticky;
   top: 12px;
   max-height: calc(100vh - 120px);
   overflow-y: auto;
-}
-.decision-tv-panel {
-  min-width: 0;
-  padding: 12px 14px 8px;
 }
 .tv-toolbar {
   justify-content: flex-start;
@@ -1107,10 +1108,6 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
   color: var(--orange, #c48420);
   font: 700 11px var(--font-geist-mono), monospace;
 }
-.tv-toolbar small {
-  color: var(--muted, #7a8276);
-  font-size: 11px;
-}
 .tv-widget-shell {
   width: 100%;
 }
@@ -1120,6 +1117,7 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
   border-radius: 8px;
   overflow: hidden;
   background: #0c100c;
+  min-height: 560px;
 }
 .tv-source-note {
   margin: 8px 0 0;
@@ -1131,62 +1129,11 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 240px;
+  min-height: 280px;
   padding: 24px;
   color: var(--muted, #7a8276);
   font-size: 13px;
   text-align: center;
-}
-.plan-levels-copyable {
-  grid-template-columns: repeat(2, 1fr);
-}
-.plan-level-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  color: var(--dim, #5c6358);
-  font: 650 10px var(--font-geist-mono), monospace;
-}
-.plan-level-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-.plan-level-value {
-  color: #d4d7cd;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  user-select: all;
-}
-.plan-copy-btn {
-  padding: 2px 6px;
-  color: var(--muted, #7a8276);
-  background: transparent;
-  border: 1px solid var(--line-soft, rgba(255, 255, 255, 0.1));
-  border-radius: 4px;
-  font: 650 9px var(--font-geist-mono), monospace;
-  cursor: pointer;
-}
-.plan-copy-btn:hover {
-  color: var(--lime, #a8c53f);
-  border-color: var(--lime, #a8c53f);
-}
-.plan-primary-rr {
-  margin: 10px 0 0;
-  color: var(--muted, #7a8276);
-  font-size: 12px;
-}
-.plan-primary-rr b {
-  color: var(--lime, #a8c53f);
-  font-size: 15px;
-}
-.plan-primary-rr small {
-  display: block;
-  margin-top: 2px;
-  font-size: 10px;
-  opacity: 0.85;
 }
 
 @media (max-width: 960px) {
@@ -1197,16 +1144,18 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
     position: static;
     max-height: none;
   }
-  /* 手機：上卡下圖，避免與底部 MobileNav 搶垂直手勢區 */
+  /* 手機：上圖下卡 */
   .decision-tv-panel .tv-widget-container {
-    min-height: 320px;
+    min-height: 380px;
   }
 }
 
 @media (max-width: 640px) {
-  .decision-tv-panel {
-    /* leave room for floating bottom nav */
-    margin-bottom: 72px;
+  .decision-view {
+    margin-bottom: 72px; /* bottom MobileNav */
+  }
+  .decision-tv-panel .tv-widget-container {
+    min-height: 340px;
   }
 }
 

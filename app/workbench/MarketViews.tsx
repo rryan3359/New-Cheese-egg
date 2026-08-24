@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { TIMEFRAMES, type AssetSnapshot, type MarketHubPayload, type StrategyName, type StrategyResult, type StrategyStatus, type Timeframe } from "../../lib/market/types";
 import { cockpitAssets, prioritizeByWatchlist, watchlistAssets } from "../../lib/workbench/watchlist";
 import TradingViewWidget from "./TradingViewWidget";
@@ -149,51 +149,11 @@ export function StrategyView({ data, onOpenChart }: { data: MarketHubPayload; on
   })}</section></div>;
 }
 
-/** Copy helper: null stays missing (never coerce to 0). */
-function copyableText(value: number | null, digits = 2): string {
-  if (value === null || !Number.isFinite(value)) return "";
-  return String(Number(value.toFixed(value < 10 ? 4 : digits)));
-}
-
-function CopyLevel({
-  label,
-  display,
-  raw,
-}: {
-  label: string;
-  display: string;
-  raw: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = useCallback(async () => {
-    if (!raw) return;
-    try {
-      await navigator.clipboard.writeText(raw);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* clipboard may be denied; numbers remain selectable */
-    }
-  }, [raw]);
-  return (
-    <span className="plan-level-item">
-      <span className="plan-level-label-row">
-        {label}
-        {raw ? (
-          <button type="button" className="plan-copy-btn" onClick={onCopy} aria-label={`複製 ${label}`}>
-            {copied ? "已複製" : "複製"}
-          </button>
-        ) : null}
-      </span>
-      <b className="plan-level-value">{display}</b>
-    </span>
-  );
-}
-
 /**
- * 決策頁：Trade Plan 卡（主）+ TradingView（旁／下）。
+ * 決策頁：TradingView（主）+ Trade Plan 卡（旁）。
  * - 不再依賴 TerminalChart／Canvas／layer 疊圖。
- * - symbol／timeframe 與 setup 對齊後傳入 TV；數字以卡片為準，使用者自行在 TV 畫線。
+ * - symbol／timeframe 與 setup 對齊後傳入 TV；數字以卡片為準。
+ * - 免費 Widget 無完整畫線工具（與交易所內建 Charting Library 不同）。
  */
 export function ChartView({
   data,
@@ -224,7 +184,6 @@ export function ChartView({
     asset.strategies.find((item) => item.timeframe === timeframe && item.strategy === strategy) ?? null;
   const symbolOptions = prioritizeByWatchlist(data.assets, watchlist);
 
-  // When setup exists, prefer its symbol/timeframe for TV so card and chart stay aligned.
   const tvSymbol = setup?.symbol ?? asset.symbol;
   const tvTimeframe = setup?.timeframe ?? timeframe;
 
@@ -271,7 +230,17 @@ export function ChartView({
       </section>
 
       <section className="chart-layout decision-layout">
-        {/* Primary: Trade Plan card — readable levels for manual TV annotation */}
+        {/* Main: TradingView — larger, left on desktop / top on mobile */}
+        <article className="terminal-panel chart-panel decision-tv-panel">
+          <div className="chart-toolbar tv-toolbar">
+            <p>
+              TradingView · {tvSymbol.replace("USDT", "/USDT")} · {tvTimeframe}
+            </p>
+          </div>
+          <TradingViewWidget symbol={tvSymbol} timeframe={tvTimeframe} theme={theme} height={560} />
+        </article>
+
+        {/* Side: Trade Plan card */}
         <article className="terminal-panel strategy-plan decision-plan-card">
           <div className="panel-heading">
             <div>
@@ -291,38 +260,32 @@ export function ChartView({
                   完成 {setup.conditionsMet}/{setup.conditionsTotal} 個條件
                 </em>
               </div>
-              <div className="plan-levels plan-levels-copyable">
-                <CopyLevel
-                  label="進場區（下緣）"
-                  display={formatPrice(setup.entryLow)}
-                  raw={copyableText(setup.entryLow)}
-                />
-                <CopyLevel
-                  label="進場區（上緣）"
-                  display={formatPrice(setup.entryHigh)}
-                  raw={copyableText(setup.entryHigh)}
-                />
-                <CopyLevel label="停損" display={formatPrice(setup.stop)} raw={copyableText(setup.stop)} />
-                <CopyLevel
-                  label="TP1"
-                  display={`${formatPrice(setup.tp1)} · ${rr(setup.riskRewardTp1)}`}
-                  raw={copyableText(setup.tp1)}
-                />
-                <CopyLevel
-                  label="TP2"
-                  display={`${formatPrice(setup.tp2)} · ${rr(setup.riskRewardTp2)}`}
-                  raw={copyableText(setup.tp2)}
-                />
-                <CopyLevel
-                  label="TP3"
-                  display={`${formatPrice(setup.tp3)} · ${rr(setup.riskRewardTp3)}`}
-                  raw={copyableText(setup.tp3)}
-                />
+              <div className="plan-levels">
+                <span>
+                  進場區
+                  <b>
+                    {formatPrice(setup.entryLow)}–{formatPrice(setup.entryHigh)}
+                  </b>
+                  <small>採較保守的邊界計算報酬風險比</small>
+                </span>
+                <span>
+                  停損
+                  <b>{formatPrice(setup.stop)}</b>
+                </span>
+                <span>
+                  目標一／二／三
+                  <b>
+                    {formatPrice(setup.tp1)} / {formatPrice(setup.tp2)} / {formatPrice(setup.tp3)}
+                  </b>
+                  <small>
+                    {rr(setup.riskRewardTp1)} / {rr(setup.riskRewardTp2)} / {rr(setup.riskRewardTp3)}
+                  </small>
+                </span>
+                <span>
+                  {setup.primaryTarget ?? "主要目標"}
+                  <b>{rr(setup.primaryRiskReward)}</b>
+                </span>
               </div>
-              <p className="plan-primary-rr">
-                {setup.primaryTarget ?? "主要目標"} · <b>{rr(setup.primaryRiskReward)}</b>
-                <small>採較保守的邊界計算報酬風險比</small>
-              </p>
               <p className="plan-copy">
                 <b>何時成立：</b>
                 {setup.trigger}
@@ -349,17 +312,6 @@ export function ChartView({
           ) : (
             <div className="inline-empty">目前資料不足，先不產生交易計畫。</div>
           )}
-        </article>
-
-        {/* Secondary: interactive TradingView — no auto overlays, no canvas layers */}
-        <article className="terminal-panel chart-panel decision-tv-panel">
-          <div className="chart-toolbar tv-toolbar">
-            <p>
-              TradingView · {tvSymbol.replace("USDT", "/USDT")} · {tvTimeframe}
-            </p>
-            <small>在圖上自行縮放、拉歷史、畫進場／停損／目標</small>
-          </div>
-          <TradingViewWidget symbol={tvSymbol} timeframe={tvTimeframe} theme={theme} height={480} />
         </article>
       </section>
     </div>

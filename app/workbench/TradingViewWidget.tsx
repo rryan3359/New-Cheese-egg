@@ -72,7 +72,7 @@ export default function TradingViewWidget({
   symbol,
   timeframe,
   theme = "dark",
-  height = 480,
+  height = 560,
 }: TradingViewWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<{ remove?: () => void } | null>(null);
@@ -160,7 +160,7 @@ export default function TradingViewWidget({
         data-timeframe={timeframe}
       />
       <p className="tv-source-note">
-        圖表來源：TradingView（{toTvSymbol(symbol)} · {timeframe}）。策略數字來自 Market Data Hub，兩者可能非同一交易所撮合；以計畫卡數字為準，在圖上自行畫線／縮放。
+        圖表來源：TradingView（{toTvSymbol(symbol)} · {timeframe}）。策略數字來自 Market Data Hub；兩者可能非同一交易所，以計畫卡為準。
       </p>
     </div>
   );
