@@ -205,8 +205,8 @@ export default function CryptoWorkbench() {
           copy={
             error ??
             (loading
-              ? "先抓價格與資金費率，再補 OI／多空比／K 線。Binance 若 403／超時會立刻改走 OKX，請稍候數秒。"
-              : "正在取得永續合約行情；Binance 失敗時自動備援 OKX。")
+              ? "正在從 OKX 抓取價格、資金費率、OI／多空比與 K 線，請稍候數秒。"
+              : "正在從 OKX 取得永續合約行情。")
           }
         />
       );

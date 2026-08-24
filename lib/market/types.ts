@@ -148,6 +148,7 @@ export type ProviderHealth = {
 };
 
 export type PipelineStage =
+  | "using-okx"
   | "using-binance"
   | "filling-from-okx"
   | "using-okx-fallback"

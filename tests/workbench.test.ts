@@ -4,7 +4,7 @@ import test from "node:test";
 import { evaluateAlert, evaluateAlerts } from "../lib/alerts/engine";
 import { calculateJournalAnalytics } from "../lib/journal/analytics";
 import { mapWithConcurrency } from "../lib/market/http";
-import { __setMarketCacheForTests, buildMarketHub, getMarketHub, okxPlanForMissingFields } from "../lib/market/hub";
+import { __setMarketCacheForTests, buildMarketHub, getMarketHub } from "../lib/market/hub";
 import { markPayloadStale, mergeProviderPayloads, metric } from "../lib/market/merge";
 import { breakout, calculateRiskRewards, evaluateStrategies, fundingMeanReversion, ictLiquiditySweep, positioningDivergence, rangeMeanReversion } from "../lib/market/strategies";
 import { validateAlertSnapshot } from "../lib/market/snapshot";
@@ -39,9 +39,9 @@ function rawAsset(overrides: Partial<RawAsset> = {}): RawAsset {
   return { symbol: "BTCUSDT", base: "BTC", price: 104, change24h: 2, quoteVolume: 2_000_000, quoteVolumeUnit: "USDT", quoteVolumeMethod: "test quote volume", funding: .0001, openInterest: 1_000_000, oiChange1h: 1, topRatios: [1, 1.02, .99, 1.03, 1.01, 1], globalRatios: [1, 1, 1, 1, 1, 1], candlesByTimeframe, latencyMs: 10, errors: [], ...overrides };
 }
 
-function provider(name: "Binance" | "OKX", asset: RawAsset): ProviderPayload { return { assets: [asset], health: health(name) }; }
+function provider(name: "OKX" | "Binance", asset: RawAsset): ProviderPayload { return { assets: [asset], health: health(name === "Binance" ? "OKX" : name) }; }
 function fear() { return Promise.resolve({ value: metric({ value: 50, label: "Neutral" }, "Alternative.me", "live", 1, null, now), health: health("Alternative.me") }); }
-function market(binance: ProviderPayload | null = provider("Binance", rawAsset()), okx: ProviderPayload | null = provider("OKX", rawAsset())) {
+function market(binance: ProviderPayload | null = null, okx: ProviderPayload | null = provider("OKX", rawAsset())) {
   return mergeProviderPayloads({ binance, okx, fearGreed: metric({ value: 50, label: "Neutral" }, "Alternative.me", "live", 10, null, now), fearHealth: health("Alternative.me"), now });
 }
 
@@ -65,60 +65,22 @@ test("provider work queue never exceeds its configured concurrency", async () =>
   assert.deepEqual(values, [2, 4, 6, 8, 10, 12]);
 });
 
-test("Binance success returns without waiting for OKX warm standby", async () => {
-  let okxCalls = 0;
-  const startedAt = Date.now();
+test("OKX-only hub returns live OKX metrics", async () => {
   const payload = await buildMarketHub(false, {
-    binance: async () => provider("Binance", rawAsset()),
-    okx: async () => { okxCalls += 1; await new Promise((resolve) => setTimeout(resolve, 120)); return provider("OKX", rawAsset()); },
+    okx: async () => provider("OKX", rawAsset({ price: 99 })),
     fear,
   });
-  assert.equal(okxCalls, 0);
-  assert.equal(payload.pipeline.stage, "using-binance");
-  assert.ok(Date.now() - startedAt < 100, `unexpected latency ${Date.now() - startedAt}ms`);
-});
-
-test("Binance missing fields request only the required OKX fields", async () => {
-  const incomplete = rawAsset({ funding: null, candlesByTimeframe: { ...rawAsset().candlesByTimeframe, "4h": [] } });
-  const plan = okxPlanForMissingFields(provider("Binance", incomplete));
-  assert.deepEqual(plan.fundingSymbols, ["BTCUSDT"]);
-  assert.deepEqual(plan.candleTimeframes.BTCUSDT, ["4h"]);
-  assert.deepEqual(plan.tickerSymbols, []);
-  let receivedPlan = plan;
-  const payload = await buildMarketHub(false, { binance: async () => provider("Binance", incomplete), okx: async (next) => { receivedPlan = next; return provider("OKX", rawAsset()); }, fear });
-  assert.deepEqual(receivedPlan, plan);
-  assert.equal(payload.assets[0].funding.source, "OKX");
-  assert.equal(payload.pipeline.stage, "filling-from-okx");
-});
-
-test("Binance failure switches completely to OKX", async () => {
-  let fullPlan = false;
-  const payload = await buildMarketHub(false, { binance: async () => { throw new Error("Binance unavailable"); }, okx: async (plan) => { fullPlan = plan.full; return provider("OKX", rawAsset()); }, fear });
-  assert.equal(fullPlan, true);
-  assert.equal(payload.pipeline.stage, "using-okx-fallback");
+  assert.equal(payload.pipeline.stage, "using-okx");
   assert.equal(payload.assets[0].price.source, "OKX");
+  assert.equal(payload.assets[0].price.value, 99);
+  assert.equal(payload.pipeline.binanceDurationMs, null);
 });
 
-test("normal and force OKX in-flight requests never share results", async () => {
-  __setMarketCacheForTests(null);
-  const providers = {
-    binance: async () => { await new Promise((resolve) => setTimeout(resolve, 15)); return provider("Binance", rawAsset({ price: 111 })); },
-    okx: async () => { await new Promise((resolve) => setTimeout(resolve, 5)); return provider("OKX", rawAsset({ price: 222 })); },
-    fear,
-  };
-  const [normal, forced] = await Promise.all([getMarketHub(false, providers), getMarketHub(true, providers)]);
-  assert.equal(normal.pipeline.mode, "normal");
-  assert.equal(normal.assets[0].price.value, 111);
-  assert.equal(forced.pipeline.mode, "force-okx");
-  assert.equal(forced.assets[0].price.value, 222);
-});
-
-test("hung OKX fallback is hard bounded, returns stale data, and clears in-flight state", async () => {
-  const saved = market();
+test("hung OKX is hard bounded, returns stale data, and clears in-flight state", async () => {
+  const saved = market(null, provider("OKX", rawAsset({ price: 50 })));
   __setMarketCacheForTests({ payload: saved, storedAt: Date.now() - 31_000 });
   const startedAt = Date.now();
   const stale = await getMarketHub(false, {
-    binance: async () => { throw new Error("Binance unavailable"); },
     okx: async () => new Promise<ProviderPayload>(() => undefined),
     fear,
     okxTimeoutMs: 15,
@@ -127,11 +89,10 @@ test("hung OKX fallback is hard bounded, returns stale data, and clears in-fligh
   assert.ok(Date.now() - startedAt < 1_200, `deadline did not stop request: ${Date.now() - startedAt}ms`);
 
   const recovered = await getMarketHub(false, {
-    binance: async () => provider("Binance", rawAsset({ price: 123 })),
-    okx: async () => provider("OKX", rawAsset()),
+    okx: async () => provider("OKX", rawAsset({ price: 123 })),
     fear,
   });
-  assert.equal(recovered.pipeline.stage, "using-binance");
+  assert.equal(recovered.pipeline.stage, "using-okx");
   assert.equal(recovered.assets[0].price.value, 123);
 });
 

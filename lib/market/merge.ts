@@ -8,9 +8,10 @@ export function metric<T>(value: T | null, source: Metric<T>["source"], state: D
   return { value, source, state, updatedAt: now, latencyMs, reason };
 }
 
+/** OKX is the sole market provider; secondary kept for optional dual-source tests only. */
 export function chooseMetric<T>(primary: T | null | undefined, fallback: T | null | undefined, primaryLatency: number | null, fallbackLatency: number | null, missingReason: string, now: string): Metric<T> {
-  if (primary !== null && primary !== undefined) return metric(primary, "Binance", "live", primaryLatency, null, now);
-  if (fallback !== null && fallback !== undefined) return metric(fallback, "OKX", "fallback", fallbackLatency, "Binance 欄位缺少，已由 OKX 接手", now);
+  if (primary !== null && primary !== undefined) return metric(primary, "OKX", "live", primaryLatency, null, now);
+  if (fallback !== null && fallback !== undefined) return metric(fallback, "OKX", "fallback", fallbackLatency, "次要來源補洞", now);
   return metric<T>(null, "Calculated", "missing", null, missingReason, now);
 }
 
@@ -71,22 +72,23 @@ export function mergeProviderPayloads(input: {
   pipeline?: MarketHubPayload["pipeline"];
 }): MarketHubPayload {
   const now = input.now ?? new Date().toISOString();
-  const primaryMap = new Map((input.binance?.assets ?? []).map((asset) => [asset.symbol, asset]));
-  const fallbackMap = new Map((input.okx?.assets ?? []).map((asset) => [asset.symbol, asset]));
+  // Primary = OKX only (Binance path removed). `binance` input ignored if present.
+  const primaryMap = new Map((input.okx?.assets ?? []).map((asset) => [asset.symbol, asset]));
+  const fallbackMap = new Map((input.binance?.assets ?? []).map((asset) => [asset.symbol, asset]));
   const symbols = Array.from(new Set([...primaryMap.keys(), ...fallbackMap.keys()]));
   const assets = symbols.map((symbol): AssetSnapshot => {
     const primary = primaryMap.get(symbol);
     const fallback = fallbackMap.get(symbol);
-    const funding = chooseMetric(primary?.funding, fallback?.funding, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Funding 在 Binance／OKX 皆缺少", now);
-    const oiChange = chooseMetric(primary?.oiChange1h, fallback?.oiChange1h, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "OI change 在兩個來源皆缺少", now);
+    const funding = chooseMetric(primary?.funding, fallback?.funding, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Funding 在 OKX 缺少", now);
+    const oiChange = chooseMetric(primary?.oiChange1h, fallback?.oiChange1h, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "OI change 在 OKX 缺少", now);
     const quoteVolume = chooseMetric(primary?.quoteVolume, fallback?.quoteVolume, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Quote volume unavailable", now);
     const volumeSource = primary?.quoteVolume !== null && primary?.quoteVolume !== undefined ? primary : fallback?.quoteVolume !== null && fallback?.quoteVolume !== undefined ? fallback : null;
     const topRatios = (primary?.topRatios?.length ? primary.topRatios : fallback?.topRatios) ?? [];
     const globalRatios = (primary?.globalRatios?.length ? primary.globalRatios : fallback?.globalRatios) ?? [];
-    const ratioSource: "Binance" | "OKX" | "Calculated" = primary?.topRatios?.length || primary?.globalRatios?.length ? "Binance" : fallback?.globalRatios?.length || fallback?.topRatios?.length ? "OKX" : "Calculated";
-    // Prefer Binance dual-ratio positioning; if only global (OKX), use a simplified score from global alone
+    const ratioSource: "Binance" | "OKX" | "Calculated" = primary?.topRatios?.length || primary?.globalRatios?.length ? "OKX" : fallback?.globalRatios?.length || fallback?.topRatios?.length ? "OKX" : "Calculated";
+    // OKX: global account ratio + top-trader account ratio (when available)
     let position: number | null = null;
-    let positionReason: string | null = "Positioning 需要多空比歷史（Binance Top+Global 或 OKX Global）";
+    let positionReason: string | null = "Positioning 需要 OKX Global／大戶多空比歷史";
     if (topRatios.length >= 5 && globalRatios.length >= 5) {
       position = positioningScore(topRatios, globalRatios);
       positionReason = null;
@@ -97,14 +99,14 @@ export function mergeProviderPayloads(input: {
       const std = Math.sqrt(variance) || 0;
       const z = std ? (logs.at(-1)! - avg) / std : 0;
       position = Math.max(-100, Math.min(100, Math.round(z * 34)));
-      positionReason = "僅有 Global 多空比（無大戶比），傾向分數為簡化估算";
+      positionReason = "僅有 Global 多空比（大戶比不足），傾向分數為簡化估算";
     }
     const timeframes = Object.fromEntries(TIMEFRAMES.map((timeframe) => {
       const primaryCandles = primary?.candlesByTimeframe[timeframe] ?? [];
       const fallbackCandles = fallback?.candlesByTimeframe[timeframe] ?? [];
       const candles = primaryCandles.length ? primaryCandles : fallbackCandles;
-      const source = primaryCandles.length ? "Binance" : fallbackCandles.length ? "OKX" : "Calculated";
-      const state: DataState = primaryCandles.length ? "live" : fallbackCandles.length ? "fallback" : "missing";
+      const source = primaryCandles.length || fallbackCandles.length ? "OKX" : "Calculated";
+      const state: DataState = candles.length ? "live" : "missing";
       return [timeframe, buildTimeframe(timeframe, candles, source, state, primary?.latencyMs ?? fallback?.latencyMs ?? null, now)];
     })) as Record<Timeframe, TimeframeSnapshot>;
     // Only evaluate strategies when at least one timeframe has candles (L3); otherwise empty + honest missing downstream
@@ -133,13 +135,13 @@ export function mergeProviderPayloads(input: {
       quoteVolumeMethod: volumeSource?.quoteVolumeMethod ?? "成交量單位無法確認，不參與跨來源排序",
       openInterest: chooseMetric(primary?.openInterest, fallback?.openInterest, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "OI unavailable", now),
       oiChange1h: oiChange, funding,
-      globalRatio: chooseMetric(primary?.globalRatios.at(-1), fallback?.globalRatios.at(-1), primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Global 多空比在 Binance／OKX 皆缺少", now),
-      topRatio: chooseMetric(primary?.topRatios.at(-1), fallback?.topRatios.at(-1), primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "大戶多空比僅 Binance 提供；OKX 無對應欄位", now),
-      positioning: metric(position, ratioSource === "Calculated" ? "Calculated" : ratioSource, position === null ? "missing" : ratioSource === "OKX" ? "fallback" : "live", primary?.latencyMs ?? fallback?.latencyMs ?? null, position === null ? positionReason : (positionReason ?? "交易所帳戶多空傾向，非真實持倉集中度"), now),
+      globalRatio: chooseMetric(primary?.globalRatios.at(-1), fallback?.globalRatios.at(-1), primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Global 多空比在 OKX 缺少", now),
+      topRatio: chooseMetric(primary?.topRatios.at(-1), fallback?.topRatios.at(-1), primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "大戶多空比資料不足（OKX top trader）", now),
+      positioning: metric(position, ratioSource === "Calculated" ? "Calculated" : "OKX", position === null ? "missing" : "live", primary?.latencyMs ?? fallback?.latencyMs ?? null, position === null ? positionReason : (positionReason ?? "交易所帳戶多空傾向，非真實持倉集中度"), now),
       timeframes, strategies, setup: preferredSetup(strategies),
     };
   }).filter((asset) => asset.price.value !== null || TIMEFRAMES.some((timeframe) => asset.timeframes[timeframe].candles.length));
-  if (!assets.length) throw new Error("No market records from Binance or OKX");
+  if (!assets.length) throw new Error("No market records from OKX");
   const advancing = assets.filter((asset) => (asset.change24h.value ?? 0) > 0).length;
   const trendingUp = assets.filter((asset) => asset.timeframes["4h"].trend.value === "Trend Up").length;
   const highVol = assets.filter((asset) => asset.timeframes["1h"].volatility.value === "High").length;
@@ -151,7 +153,7 @@ export function mergeProviderPayloads(input: {
     if (asset.change1h.value !== null && asset.oiChange1h.value !== null && asset.change1h.value > 1 && asset.oiChange1h.value < -1) alerts.push(`${asset.symbol.replace("USDT", "")} 價格上漲但 OI 下降`);
     return alerts;
   }).slice(0, 8);
-  const health = [input.binance?.health, input.okx?.health, input.fearHealth].filter((item): item is MarketHubPayload["health"][number] => Boolean(item));
+  const health = [input.okx?.health, input.fearHealth].filter((item): item is MarketHubPayload["health"][number] => Boolean(item));
   const recentErrors = health.flatMap((provider) => provider.errors.map((error) => `${provider.name}: ${error}`)).slice(0, 15);
   return {
     success: true,
@@ -166,11 +168,11 @@ export function mergeProviderPayloads(input: {
     health,
     recentErrors,
     pipeline: input.pipeline ?? {
-      stage: input.okx && !input.binance ? "using-okx-fallback" : input.okx ? "filling-from-okx" : "using-binance",
+      stage: "using-okx",
       mode: "normal",
       tier: "l2",
       marketApiDurationMs: 0,
-      binanceDurationMs: input.binance?.health.latencyMs ?? null,
+      binanceDurationMs: null,
       okxDurationMs: input.okx?.health.latencyMs ?? null,
       okxFetchedFields: [],
     },

@@ -100,7 +100,7 @@ export function DerivativesView({ data }: { data: MarketHubPayload }) {
   const extremePos = withPos.filter((a) => Math.abs(a.positioning.value!) >= 60).length;
   return (
     <div className="view-stack">
-      <ViewTitle eyebrow="DERIVATIVES" title="看價格，也看誰正被擠在同一邊。" copy="資金費率、未平倉量與帳戶多空比會一起看；這裡顯示的是交易所帳戶多空傾向，不是真實持倉集中度。缺值顯示「—／資料不足」，不會填假 0。" />
+      <ViewTitle eyebrow="DERIVATIVES" title="看價格，也看誰正被擠在同一邊。" copy="資料來自 OKX：資金費率、未平倉量、全體／大戶帳戶多空比。傾向分數是帳戶多空傾向，不是真實持倉集中度。缺值顯示「—」，不會填假 0。資金費率常見約 0.01%（中性），多檔相同不代表錯誤。" />
       <section className="derivative-summary">
         <article>
           <span>資金費率明顯偏高或偏低</span>

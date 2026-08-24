@@ -212,10 +212,19 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
           options.signal,
         ).catch(() => null)
       : null;
+    // Top traders (top ~5% by position value) — OKX equivalent of Binance top long/short ratio
+    const topLsPromise = needsOi
+      ? fetchOkx(
+          `${API}/api/v5/rubik/stat/contracts/long-short-account-ratio-contract-top-trader?instId=${instId}&period=1H`,
+          longShortSchema,
+          schedule,
+          options.signal,
+        ).catch(() => null)
+      : null;
 
     const candleLimit = (tf: Timeframe) => CANDLE_LIMITS[tf];
 
-    const [fundingResult, oiResult, oiHistResult, lsResult, candleResults] = await Promise.all([
+    const [fundingResult, oiResult, oiHistResult, lsResult, topLsResult, candleResults] = await Promise.all([
       fundingPromise
         ? fundingPromise
             .then((value) => ({ status: "fulfilled" as const, value }))
@@ -241,6 +250,15 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
               value
                 ? { status: "fulfilled" as const, value }
                 : { status: "rejected" as const, reason: new Error("LS ratio unavailable") },
+            )
+            .catch((reason) => ({ status: "rejected" as const, reason }))
+        : Promise.resolve(null),
+      topLsPromise
+        ? topLsPromise
+            .then((value) =>
+              value
+                ? { status: "fulfilled" as const, value }
+                : { status: "rejected" as const, reason: new Error("Top LS ratio unavailable") },
             )
             .catch((reason) => ({ status: "rejected" as const, reason }))
         : Promise.resolve(null),
@@ -279,20 +297,27 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
       }
     }
 
-    const globalRatios: number[] = [];
-    if (lsResult?.status === "fulfilled") {
-      const rows = lsResult.value.data.data;
+    const parseRatioSeries = (rows: [string, string][] | undefined): number[] => {
+      const out: number[] = [];
+      if (!rows?.length) return out;
       for (const row of rows.slice(0, 30).reverse()) {
         const ratio = Number(row[1]);
-        if (Number.isFinite(ratio) && ratio > 0) globalRatios.push(ratio);
+        if (Number.isFinite(ratio) && ratio > 0) out.push(ratio);
       }
-    }
+      return out;
+    };
+
+    const globalRatios =
+      lsResult?.status === "fulfilled" ? parseRatioSeries(lsResult.value.data.data as [string, string][]) : [];
+    const topRatios =
+      topLsResult?.status === "fulfilled" ? parseRatioSeries(topLsResult.value.data.data as [string, string][]) : [];
 
     const errors = [
       ...(fundingResult?.status === "rejected" ? [`${base} Funding: ${message(fundingResult.reason)}`] : []),
       ...(oiResult?.status === "rejected" ? [`${base} OI: ${message(oiResult.reason)}`] : []),
       ...(oiHistResult?.status === "rejected" ? [`${base} OI hist: ${message(oiHistResult.reason)}`] : []),
       ...(lsResult?.status === "rejected" ? [`${base} LS ratio: ${message(lsResult.reason)}`] : []),
+      ...(topLsResult?.status === "rejected" ? [`${base} Top LS: ${message(topLsResult.reason)}`] : []),
       ...timeframePlan.flatMap((timeframe, index) =>
         candleResults[index]?.status === "rejected"
           ? [`${base} ${timeframe}: ${message((candleResults[index] as PromiseRejectedResult).reason)}`]
@@ -317,7 +342,7 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
       funding,
       openInterest,
       oiChange1h,
-      topRatios: [],
+      topRatios,
       globalRatios,
       candlesByTimeframe: timeframePlan.length ? candlesByTimeframe : emptyCandleMap(),
       latencyMs: Date.now() - startedAt,

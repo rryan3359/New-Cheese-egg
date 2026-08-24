@@ -12,8 +12,7 @@
 - 警報：在市場刷新時真正執行，具有 cooldown、資料快照去重、站內／瀏覽器事件紀錄；介面明確說明分頁關閉時不保證 24/7 執行。
 - 風險管理：把來回手續費納入單筆最大損失，提供倉位、保證金、槓桿警告與 1R／2R／3R。
 - 交易日誌：使用實際數量、費用與 Funding 成本計算淨損益、R、勝率、PF、最大連敗、最大回撤與分組統計。
-- 主要來源 Binance、備援 OKX、Fear & Greed 來源 Alternative.me。
-- Binance 完整時立即回傳；只有 Binance 整體失敗、必要欄位缺少或手動驗收時才等待 OKX。一般刷新與強制 OKX 使用不同 in-flight key。
+- 市場行情主源：**OKX**（已移除 Binance，避免 AU／Vercel 地區封鎖）；Fear & Greed：Alternative.me。
 - 市場畫面與警報引擎共用同一份經伺服器驗證的 snapshot，不會為警報再抓第二套行情。
 - TP1／TP2／TP3 風報比使用實際 entry、stop、target 計算；自選清單會影響駕駛艙、掃描器、圖表與警報排序。
 - 每個市場欄位保留 `source`、`state`、`updatedAt`、`latencyMs` 與 `reason`；缺值顯示 `missing`，不以 `0` 假裝有效。
@@ -81,7 +80,7 @@ npm run build    # vinext build
 
 Vercel **沒有** Cloudflare D1 與 Sites 使用者身分，因此：
 
-- 市場行情 API（Binance／OKX）可正常運作
+- 市場行情 API（OKX）可正常運作
 - 警報、日誌、自選清單會降級為 **瀏覽器 localStorage（僅此裝置）**
 - 不會出現「假同步成功」
 

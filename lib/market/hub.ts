@@ -2,12 +2,6 @@ import { z } from "zod";
 import { circuitHealth, fetchValidated } from "./http";
 import { markPayloadStale, mergeProviderPayloads, metric } from "./merge";
 import {
-  binancePlanForTier,
-  failedBinanceHealth,
-  getBinanceData,
-  isBinanceHardFail,
-} from "./providers/binance";
-import {
   failedOkxHealth,
   fullOkxFetchPlan,
   getOkxData,
@@ -17,7 +11,6 @@ import {
 } from "./providers/okx";
 import { symbolsForTier } from "./symbols";
 import {
-  TIMEFRAMES,
   type FetchTier,
   type MarketHubPayload,
   type OkxFetchPlan,
@@ -32,18 +25,12 @@ const FRESH_TTL_MS: Record<FetchTier, number> = {
 };
 const STALE_TTL_MS = 10 * 60_000;
 
-/** Tier-scoped deadlines — average latency first */
-const BINANCE_DEADLINE_MS: Record<FetchTier, number> = {
-  l1: 3_500,
-  l2: 8_000,
-  l3: 18_000,
-};
+/** Tier-scoped deadlines — OKX only */
 const OKX_DEADLINE_MS: Record<FetchTier, number> = {
-  l1: 3_500,
-  l2: 10_000,
-  l3: 16_000,
+  l1: 4_000,
+  l2: 12_000,
+  l3: 20_000,
 };
-const OKX_FORCE_DEADLINE_MS = 32_000;
 
 const fearSchema = z.object({
   data: z.array(
@@ -57,10 +44,8 @@ const fearSchema = z.object({
 type FearResult = Awaited<ReturnType<typeof getFearGreed>>;
 
 type ProviderClients = {
-  binance?: () => Promise<ProviderPayload>;
   okx?: (plan: OkxFetchPlan, signal?: AbortSignal) => Promise<ProviderPayload>;
   fear?: () => Promise<FearResult>;
-  binanceTimeoutMs?: number;
   okxTimeoutMs?: number;
 };
 
@@ -145,45 +130,6 @@ function unique(values: string[]) {
   return Array.from(new Set(values));
 }
 
-/**
- * Build OKX gap-fill plan from a Binance payload for the active tier.
- * L1: only ticker/funding gaps on symbols already present.
- * L2: also OI / positioning — never candles.
- * L3: candle gaps only (or full force path uses fullOkxFetchPlan).
- */
-export function okxPlanForMissingFields(binance: ProviderPayload, tier: FetchTier = "l2"): OkxFetchPlan {
-  const tickerSymbols: string[] = [];
-  const fundingSymbols: string[] = [];
-  const openInterestSymbols: string[] = [];
-  const candleTimeframes: OkxFetchPlan["candleTimeframes"] = {};
-
-  for (const asset of binance.assets) {
-    if (tier === "l1") {
-      if (asset.price === null || asset.change24h === null || asset.quoteVolume === null) tickerSymbols.push(asset.symbol);
-      if (asset.funding === null) fundingSymbols.push(asset.symbol);
-      continue;
-    }
-    if (tier === "l2") {
-      if (asset.price === null || asset.change24h === null || asset.quoteVolume === null) tickerSymbols.push(asset.symbol);
-      if (asset.funding === null) fundingSymbols.push(asset.symbol);
-      if (asset.openInterest === null || asset.oiChange1h === null || !asset.globalRatios.length) {
-        openInterestSymbols.push(asset.symbol);
-      }
-      continue;
-    }
-    // l3
-    const missingTimeframes = TIMEFRAMES.filter((timeframe) => !asset.candlesByTimeframe[timeframe].length);
-    if (missingTimeframes.length) candleTimeframes[asset.symbol] = missingTimeframes;
-  }
-
-  const symbols = unique([
-    ...tickerSymbols,
-    ...fundingSymbols,
-    ...openInterestSymbols,
-    ...Object.keys(candleTimeframes),
-  ]);
-  return { full: false, symbols, tickerSymbols, fundingSymbols, openInterestSymbols, candleTimeframes };
-}
 
 function fetchedFields(plan: OkxFetchPlan) {
   if (plan.full) return ["ticker", "funding", "openInterest", "oiChange", "longShortRatio", "candles:15m/1h/4h/1d"];
@@ -197,172 +143,56 @@ function fetchedFields(plan: OkxFetchPlan) {
   ];
 }
 
-function okxStandbyPayload(): ProviderPayload {
-  const health =
-    lastOkxHealth ??
-    ({
-      name: "OKX" as const,
-      state: "live" as const,
-      latencyMs: null,
-      lastSuccessAt: null,
-      lastFailureAt: null,
-      consecutiveFailures: 0,
-      circuitOpen: false,
-      coverage: { ticker: 0, funding: 0, oi: 0, positioning: 0, candles: 0 },
-      errors: [],
-    } satisfies ProviderHealth);
-  return { assets: [], health };
+function planForTier(tier: FetchTier): OkxFetchPlan {
+  const symbols = symbolsForTier(tier);
+  if (tier === "l1") return okxL1Plan(symbols);
+  if (tier === "l2") return okxL2Plan(symbols);
+  return fullOkxFetchPlan();
 }
 
-function cacheKey(forceOkx: boolean, tier: FetchTier) {
-  return forceOkx ? `force-okx:${tier}` : `normal:${tier}`;
-}
-
-function resolveOkxPlanForTier(tier: FetchTier, binancePayload: ProviderPayload | null, hardFail: boolean): OkxFetchPlan {
-  if (hardFail || !binancePayload) {
-    if (tier === "l1") return okxL1Plan(symbolsForTier("l1"));
-    if (tier === "l2") return okxL2Plan(symbolsForTier("l2"));
-    return fullOkxFetchPlan();
-  }
-  const gap = okxPlanForMissingFields(binancePayload, tier);
-  if (!gap.symbols.length) return gap;
-  return gap;
-}
-
+/**
+ * Market Data Hub — OKX only (Binance removed for AU / Vercel reliability).
+ * forceOkx is kept as a no-op alias for API compatibility (always OKX).
+ */
 export async function buildMarketHub(
-  forceOkx = false,
+  _forceOkx = false,
   providers: ProviderClients = {},
   tier: FetchTier = "l2",
 ) {
   const startedAt = Date.now();
   const fearPromise = providers.fear ? providers.fear() : getFearGreed();
   const okxProvider = providers.okx ?? ((plan: OkxFetchPlan, signal?: AbortSignal) => getOkxData(plan, { signal }));
-  const symbols = symbolsForTier(tier);
-  const binancePlan = binancePlanForTier(tier, symbols);
+  const plan = planForTier(tier);
 
-  if (forceOkx) {
-    // Force path: L3 / full includes short candles so scanner + chart still work on pure OKX
-    const plan =
-      tier === "l1" ? okxL1Plan(symbols) : tier === "l2" ? okxL2Plan(symbols) : fullOkxFetchPlan();
-    const [okxResult, fear] = await Promise.all([
-      settled(
-        withDeadline("OKX force fallback", providers.okxTimeoutMs ?? OKX_FORCE_DEADLINE_MS, (signal) =>
-          okxProvider(plan, signal),
-        ),
-      ),
-      fearPromise,
-    ]);
-    const okxHealth = okxResult.value?.health ?? failedOkxHealth(okxResult.error);
-    if (okxResult.value) lastOkxHealth = okxResult.value.health;
-    const duration = Date.now() - startedAt;
-    return mergeProviderPayloads({
-      binance: null,
-      okx: { assets: okxResult.value?.assets ?? [], health: okxHealth },
-      fearGreed: fear.value,
-      fearHealth: fear.health,
-      staleTtlMs: STALE_TTL_MS,
-      pipeline: {
-        stage: "using-okx-fallback",
-        mode: "force-okx",
-        tier,
-        marketApiDurationMs: duration,
-        binanceDurationMs: null,
-        okxDurationMs: okxHealth.latencyMs,
-        okxFetchedFields: fetchedFields(plan),
-      },
-    });
-  }
-
-  const binanceStartedAt = Date.now();
-  const binanceResult = await settled(
-    withDeadline("Binance", providers.binanceTimeoutMs ?? BINANCE_DEADLINE_MS[tier], (signal) =>
-      providers.binance
-        ? providers.binance()
-        : getBinanceData({ signal, plan: binancePlan }),
+  const [okxResult, fear] = await Promise.all([
+    settled(
+      withDeadline("OKX", providers.okxTimeoutMs ?? OKX_DEADLINE_MS[tier], (signal) => okxProvider(plan, signal)),
     ),
-  );
-  const binanceDurationMs = Date.now() - binanceStartedAt;
-  const binanceHardFail = !binanceResult.value && isBinanceHardFail(binanceResult.error);
-  const binancePayload = binanceResult.value?.assets.length ? binanceResult.value : null;
-  const binanceHealth =
-    binancePayload?.health ?? failedBinanceHealth(binanceResult.error ?? new Error("Binance returned zero assets"));
+    fearPromise,
+  ]);
 
-  // OKX policy (average-latency first):
-  // - L1: only on hard-fail or empty Binance, or priority ticker/funding gaps
-  // - L2: gap-fill OI/positioning; still no candles
-  // - L3: candle gaps only
-  const plan = resolveOkxPlanForTier(tier, binancePayload, binanceHardFail);
-  const shouldRunOkx =
-    binanceHardFail ||
-    !binancePayload ||
-    plan.symbols.length > 0 ||
-    plan.full;
-
-  let okxResult: { value: ProviderPayload | null; error: unknown } | null = null;
-  if (shouldRunOkx) {
-    const okxDeadline =
-      binanceHardFail || !binancePayload
-        ? (providers.okxTimeoutMs ?? OKX_DEADLINE_MS[tier])
-        : (providers.okxTimeoutMs ?? OKX_DEADLINE_MS[tier]);
-    const effectivePlan =
-      binanceHardFail || !binancePayload
-        ? tier === "l1"
-          ? okxL1Plan(symbols)
-          : tier === "l2"
-            ? okxL2Plan(symbols)
-            : fullOkxFetchPlan()
-        : plan;
-    okxResult = await settled(
-      withDeadline("OKX fallback", okxDeadline, (signal) => okxProvider(effectivePlan, signal)),
-    );
-    if (okxResult.value) lastOkxHealth = okxResult.value.health;
-  }
-
-  const fear = await fearPromise;
-  const okxPayload = okxResult
-    ? {
-        assets: okxResult.value?.assets ?? [],
-        health: okxResult.value?.health ?? failedOkxHealth(okxResult.error),
-      }
-    : okxStandbyPayload();
+  const okxHealth = okxResult.value?.health ?? failedOkxHealth(okxResult.error);
+  if (okxResult.value) lastOkxHealth = okxResult.value.health;
   const duration = Date.now() - startedAt;
-  const effectivePlanLogged =
-    binanceHardFail || !binancePayload
-      ? tier === "l1"
-        ? okxL1Plan(symbols)
-        : tier === "l2"
-          ? okxL2Plan(symbols)
-          : fullOkxFetchPlan()
-      : plan;
 
   return mergeProviderPayloads({
-    binance: { assets: binancePayload?.assets ?? [], health: binanceHealth },
-    okx: okxPayload,
+    binance: null,
+    okx: { assets: okxResult.value?.assets ?? [], health: okxHealth },
     fearGreed: fear.value,
     fearHealth: fear.health,
     staleTtlMs: STALE_TTL_MS,
     pipeline: {
-      stage:
-        !binancePayload || binanceHardFail
-          ? "using-okx-fallback"
-          : plan.symbols.length
-            ? "filling-from-okx"
-            : "using-binance",
+      stage: "using-okx",
       mode: "normal",
       tier,
       marketApiDurationMs: duration,
-      binanceDurationMs,
-      okxDurationMs: okxResult?.value?.health.latencyMs ?? null,
-      okxFetchedFields: okxResult ? fetchedFields(effectivePlanLogged) : [],
+      binanceDurationMs: null,
+      okxDurationMs: okxHealth.latencyMs,
+      okxFetchedFields: fetchedFields(plan),
     },
   });
 }
 
-/**
- * @param forceOkx — manual / test force path
- * @param providers — injectable clients (tests)
- * @param tier — l1 critical path | l2 derivatives | l3 candles/strategy
- */
 export async function getMarketHub(
   forceOkx = false,
   providers?: ProviderClients,
@@ -429,7 +259,6 @@ export async function getMarketCandles(
   const list = symbols.length ? symbols : symbolsForTier("l1");
   return getMarketHub(false, {
     ...providers,
-    binance: providers?.binance,
     okx: providers?.okx
       ? providers.okx
       : (plan, signal) => getOkxData(plan.full ? plan : okxL3CandlePlan(list), { signal }),

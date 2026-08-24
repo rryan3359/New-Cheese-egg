@@ -8,8 +8,8 @@ import { parseStored, storageKeys, writeStored } from "./storage";
 export type LoadStage =
   | "讀取最近資料"
   | "L1 關鍵行情載入中"
-  | "使用 Binance 即時資料"
-  | "Binance 缺值，補抓 OKX"
+  | "使用 OKX 即時資料"
+  | "OKX 缺值，補抓 OKX"
   | "L2 衍生品補齊中"
   | "L3 圖表／策略 K 線載入中"
   | "OKX 備援啟用"
@@ -23,10 +23,9 @@ type UseMarketDataOptions = {
 };
 
 function stageFromPipeline(payload: MarketHubPayload): LoadStage {
-  if (payload.pipeline.stage === "using-binance") return "使用 Binance 即時資料";
-  if (payload.pipeline.stage === "filling-from-okx") return "Binance 缺值，補抓 OKX";
   if (payload.pipeline.stage === "showing-stale") return "顯示最後成功資料";
-  return "OKX 備援啟用";
+  if (payload.pipeline.stage === "using-okx" || payload.pipeline.stage === "using-okx-fallback") return "使用 OKX 即時資料";
+  return "使用 OKX 即時資料";
 }
 
 function hasUsableCandles(payload: MarketHubPayload): boolean {
