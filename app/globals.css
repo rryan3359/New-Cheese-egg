@@ -284,7 +284,7 @@ button.scanner-row:hover { background: #1d231a; }
 .chart-panel, .checklist-panel { padding: 16px; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; color: var(--muted); font: 600 10px var(--font-geist-mono), monospace; }
 .chart-legend .lime { color: var(--lime); }
-.terminal-chart { display: block; width: 100%; height: 490px; background: #0c100c; border: 1px solid var(--line-soft); border-radius: 8px; }
+/* .terminal-chart removed with Canvas chart */
 .rr-strip { display: flex; height: 26px; margin-top: 8px; border-radius: 6px; overflow: hidden; color: #0b0e0b; font: 800 10px var(--font-geist-mono), monospace; }
 .rr-strip span { display: grid; place-items: center; }
 .risk-zone { background: var(--red); }
@@ -611,7 +611,7 @@ button.scanner-row:hover { background: #1d231a; }
   .range-filter { grid-column: 1 / -1; }
   .form-grid, .form-grid.two-column, .journal-fields { grid-template-columns: repeat(2,1fr); }
   .formula-note > div:last-child { grid-template-columns: repeat(2,1fr); }
-  .terminal-chart { height: 340px; }
+  /* .terminal-chart removed with Canvas chart */
   .checklist { grid-template-columns: 1fr 1fr; }
   .data-banner { grid-template-columns: auto 1fr; }
   .data-banner button { grid-column: 2; justify-self: start; padding: 0; }
@@ -629,7 +629,7 @@ button.scanner-row:hover { background: #1d231a; }
   .chart-toolbar { align-items: start; }
   .chart-toolbar > div { flex-wrap: wrap; }
   .chart-toolbar > div:last-child .metric-state { display: none; }
-  .terminal-chart { height: 300px; }
+  /* .terminal-chart removed with Canvas chart */
   .alert-list > div { grid-template-columns: auto .7fr 1.2fr auto; }
   .alert-list em, .alert-list small { display: none; }
   .journal-table > div { min-width: 630px; }
@@ -790,7 +790,7 @@ html[data-theme="light"] .quiet-state p, html[data-theme="light"] .risk-list li,
 html[data-theme="light"] input, html[data-theme="light"] select, html[data-theme="light"] textarea { color: var(--text); background: #fffdf7; }
 html[data-theme="light"] .scanner-table { background: rgba(255,253,247,.96); box-shadow: 0 12px 34px rgba(30,36,29,.06); }
 html[data-theme="light"] .scanner-head { background: #f3efe3; }
-html[data-theme="light"] .terminal-chart { background: #172019; border-color: #3f4a3f; }
+html[data-theme="light"] /* .terminal-chart removed with Canvas chart */
 html[data-theme="light"] .liquidation-note, html[data-theme="light"] .security-note { color: #8b582f; background: #fff6ea; border-color: #e7c39d; }
 html[data-theme="light"] .direction.long { color: #526815; border-color: #cad58d; background: #f1f6d1; }
 html[data-theme="light"] .direction.short { color: #a13e2d; border-color: #efc0b4; background: #fff2ee; }
@@ -1078,3 +1078,139 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
 /* 頂欄狀態徽章已移除，殘留樣式不佔位 */
 .status-badge { display: none !important; }
 .watchlist-priority { display: none !important; }
+
+/* ── Decision view: Trade Plan + TradingView (v2) ── */
+.decision-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.decision-plan-card {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+.decision-tv-panel {
+  min-width: 0;
+  padding: 12px 14px 8px;
+}
+.tv-toolbar {
+  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+}
+.tv-toolbar p {
+  margin: 0;
+  color: var(--orange, #c48420);
+  font: 700 11px var(--font-geist-mono), monospace;
+}
+.tv-toolbar small {
+  color: var(--muted, #7a8276);
+  font-size: 11px;
+}
+.tv-widget-shell {
+  width: 100%;
+}
+.tv-widget-container {
+  width: 100%;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0c100c;
+}
+.tv-source-note {
+  margin: 8px 0 0;
+  color: var(--dim, #5c6358);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.tv-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  padding: 24px;
+  color: var(--muted, #7a8276);
+  font-size: 13px;
+  text-align: center;
+}
+.plan-levels-copyable {
+  grid-template-columns: repeat(2, 1fr);
+}
+.plan-level-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--dim, #5c6358);
+  font: 650 10px var(--font-geist-mono), monospace;
+}
+.plan-level-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.plan-level-value {
+  color: #d4d7cd;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  user-select: all;
+}
+.plan-copy-btn {
+  padding: 2px 6px;
+  color: var(--muted, #7a8276);
+  background: transparent;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, 0.1));
+  border-radius: 4px;
+  font: 650 9px var(--font-geist-mono), monospace;
+  cursor: pointer;
+}
+.plan-copy-btn:hover {
+  color: var(--lime, #a8c53f);
+  border-color: var(--lime, #a8c53f);
+}
+.plan-primary-rr {
+  margin: 10px 0 0;
+  color: var(--muted, #7a8276);
+  font-size: 12px;
+}
+.plan-primary-rr b {
+  color: var(--lime, #a8c53f);
+  font-size: 15px;
+}
+.plan-primary-rr small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+@media (max-width: 960px) {
+  .decision-layout {
+    grid-template-columns: 1fr;
+  }
+  .decision-plan-card {
+    position: static;
+    max-height: none;
+  }
+  /* 手機：上卡下圖，避免與底部 MobileNav 搶垂直手勢區 */
+  .decision-tv-panel .tv-widget-container {
+    min-height: 320px;
+  }
+}
+
+@media (max-width: 640px) {
+  .decision-tv-panel {
+    /* leave room for floating bottom nav */
+    margin-bottom: 72px;
+  }
+}
+
+
+/* TerminalChart / Canvas decision chart removed — keep class inert if stale HTML */
+/* .terminal-chart removed with Canvas chart */
+.layer-toggles { display: none !important; }

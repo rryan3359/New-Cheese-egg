@@ -90,7 +90,7 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
    * Progressive refresh:
    * 1) L1 — priority price/funding → cockpit usable in 1–3s
    * 2) L2 — OI / positioning for all symbols
-   * 3) L3 — short-depth candles → opportunity scanner + TerminalChart + strategies
+   * 3) L3 — short-depth candles → opportunity scanner + strategies (chart UI: TradingView)
    *
    * Force-OKX uses tier=l3 so charts/scanner still populate on pure OKX.
    */

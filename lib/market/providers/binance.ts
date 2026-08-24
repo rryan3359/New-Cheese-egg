@@ -113,7 +113,7 @@ export function binancePlanForTier(
     // Derivatives desk: OI / positioning, still no K (charts/strategies come from L3)
     return { symbols, fields: ["ticker", "funding", "oi", "positioning"] };
   }
-  // L3: short-depth candles for TerminalChart + strategy engine (TV migration later).
+  // L3: short-depth candles for strategy engine (chart UI uses TradingView; not full multi-TF deep K).
   // Keep bulk ticker+funding so server-side strategy eval has funding; OI comes from L2 merge.
   return {
     symbols,
