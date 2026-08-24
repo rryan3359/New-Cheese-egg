@@ -397,21 +397,177 @@ button.scanner-row:hover { background: #1d231a; }
 @media (max-width: 760px) {
   .crypto-workbench { display: block; }
   .workbench-sidebar { display: none; }
-  .mobile-bottom-nav { position: fixed; z-index: 50; inset: auto 0 0; height: 66px; display: grid; grid-template-columns: repeat(5,1fr); padding: 6px max(7px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-left)); background: rgba(9,12,9,.98); border-top: 1px solid var(--line); }
-  .mobile-bottom-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; padding: 4px 2px; color: #777e72; background: transparent; border: 0; border-radius: 7px; }
-  .mobile-bottom-nav button span { font: 700 10px var(--font-geist-mono),monospace; }
-  .mobile-bottom-nav button b { overflow: hidden; max-width: 100%; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-bottom-nav button.active { color: #fff7ed; background: var(--orange-soft); box-shadow: inset 0 -2px 0 var(--orange); }
-  .mobile-more-menu { position: fixed; z-index: 49; right: 10px; bottom: 73px; left: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 12px; background: #10130f; border: 1px solid var(--line); border-radius: 13px; box-shadow: 0 -18px 50px rgba(0,0,0,.45); }
-  .mobile-more-menu header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 2px 4px 8px; color: var(--orange-light); font-size: 12px; }
-  .mobile-more-menu header button { color: var(--muted); background: transparent; border: 0; font-size: 18px; }
-  .mobile-more-menu > button { position: relative; display: grid; grid-template-columns: 26px 1fr; gap: 2px 7px; padding: 10px; color: #b6bcb1; background: #171b15; border: 1px solid var(--line-soft); border-radius: 8px; text-align: left; }
-  .mobile-more-menu > button span { grid-row: 1 / 3; color: var(--orange); font: 700 11px var(--font-geist-mono),monospace; }
+  /* Threads-style bottom tab bar */
+  .mobile-bottom-nav {
+    position: fixed;
+    z-index: 50;
+    inset: auto 0 0;
+    height: auto;
+    display: block;
+    padding: 0;
+    background: transparent;
+    border-top: 0;
+  }
+  .mobile-bottom-nav__inner {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    align-items: end;
+    height: 56px;
+    padding: 4px max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    background: rgba(12, 14, 12, 0.88);
+    backdrop-filter: blur(18px) saturate(1.2);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.22);
+  }
+  .mobile-tab {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    min-height: 48px;
+    padding: 2px 2px 4px;
+    color: #8a9188;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-tab__icon {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 28px;
+  }
+  .mobile-tab__label {
+    overflow: hidden;
+    max-width: 100%;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.15;
+  }
+  .mobile-tab.active {
+    color: #fff;
+    background: transparent;
+    box-shadow: none;
+  }
+  .mobile-tab.active .mobile-tab__label {
+    color: #fff;
+  }
+  .mobile-tab__badge {
+    position: absolute;
+    top: -2px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: var(--orange-deep);
+    border-radius: 99px;
+    font: 700 9px/1 var(--font-geist-mono), monospace;
+    font-style: normal;
+  }
+  /* Elevated center FAB like Threads / Instagram */
+  .mobile-tab--center {
+    transform: translateY(-10px);
+  }
+  .mobile-tab__fab {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    color: #1a1208;
+    background: linear-gradient(145deg, var(--orange-light), var(--orange));
+    border-radius: 50%;
+    box-shadow: 0 6px 18px rgba(232, 140, 48, 0.38), 0 0 0 3px rgba(12, 14, 12, 0.92);
+  }
+  .mobile-tab--center .mobile-tab__label {
+    margin-top: 2px;
+    font-size: 10px;
+  }
+  .mobile-tab--center.active .mobile-tab__fab {
+    box-shadow: 0 6px 18px rgba(232, 140, 48, 0.5), 0 0 0 3px rgba(12, 14, 12, 0.92), 0 0 0 5px rgba(232, 140, 48, 0.25);
+  }
+  .mobile-more-menu {
+    position: fixed;
+    z-index: 49;
+    right: 12px;
+    bottom: 78px;
+    left: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 14px;
+    background: rgba(16, 19, 15, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.45);
+  }
+  .mobile-more-menu header {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 4px 8px;
+    color: var(--orange-light);
+    font-size: 12px;
+  }
+  .mobile-more-menu header button {
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    font-size: 18px;
+  }
+  .mobile-more-menu > button {
+    position: relative;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 2px 8px;
+    padding: 12px;
+    color: #b6bcb1;
+    background: #171b15;
+    border: 1px solid var(--line-soft);
+    border-radius: 12px;
+    text-align: left;
+  }
+  .mobile-more-menu > button .mobile-more-menu__icon {
+    grid-row: 1 / 3;
+    display: grid;
+    place-items: center;
+    color: var(--orange);
+  }
   .mobile-more-menu > button b { font-size: 12px; }
-  .mobile-more-menu > button small { color: var(--dim); font: 600 9px var(--font-geist-mono),monospace; }
-  .mobile-more-menu > button em { position: absolute; top: 5px; right: 5px; padding: 2px 4px; color: #fff; background: var(--orange-deep); border-radius: 99px; font-size: 10px; font-style: normal; }
-  .mobile-more-menu > button.active { border-color: var(--orange); background: var(--orange-soft); }
-  .workbench-main { padding-bottom: 66px; }
+  .mobile-more-menu > button small {
+    color: var(--dim);
+    font: 600 9px var(--font-geist-mono), monospace;
+  }
+  .mobile-more-menu > button em {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 2px 5px;
+    color: #fff;
+    background: var(--orange-deep);
+    border-radius: 99px;
+    font-size: 10px;
+    font-style: normal;
+  }
+  .mobile-more-menu > button.active {
+    border-color: var(--orange);
+    background: var(--orange-soft);
+  }
+  .workbench-main { padding-bottom: 72px; }
   .workbench-topbar { height: 58px; padding: 0 14px; }
   .workbench-topbar > div:first-child { display: flex; align-items: center; }
   .workbench-topbar p { display: none; }
@@ -623,11 +779,25 @@ html[data-theme="light"] .watchlist-settings button.selected { color: var(--text
 html[data-theme="light"] .alert-toasts button { color: var(--text); background: #f7f9dc; border-color: #b7c45c; box-shadow: 0 12px 35px rgba(30,36,29,.15); }
 html[data-theme="light"] .alert-toasts b { color: #526815; }
 html[data-theme="light"] .alert-toasts span { color: var(--muted); }
-html[data-theme="light"] .mobile-bottom-nav { background: rgba(255,253,247,.97); }
-html[data-theme="light"] .mobile-bottom-nav button { color: var(--muted); }
-html[data-theme="light"] .mobile-bottom-nav button.active { color: var(--text); }
-html[data-theme="light"] .mobile-more-menu { background: #fffdf7; box-shadow: 0 -18px 50px rgba(30,36,29,.18); }
-html[data-theme="light"] .mobile-more-menu > button { color: var(--text); background: #f7f4e9; }
+html[data-theme="light"] .mobile-bottom-nav__inner {
+  background: rgba(255, 253, 247, 0.9);
+  border-top-color: rgba(30, 36, 29, 0.08);
+  box-shadow: 0 -8px 28px rgba(30, 36, 29, 0.08);
+}
+html[data-theme="light"] .mobile-tab { color: #9a9f96; }
+html[data-theme="light"] .mobile-tab.active { color: var(--text); }
+html[data-theme="light"] .mobile-tab__fab {
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(232, 140, 48, 0.32), 0 0 0 3px rgba(255, 253, 247, 0.95);
+}
+html[data-theme="light"] .mobile-more-menu {
+  background: rgba(255, 253, 247, 0.96);
+  box-shadow: 0 -18px 50px rgba(30, 36, 29, 0.14);
+}
+html[data-theme="light"] .mobile-more-menu > button {
+  color: var(--text);
+  background: #f7f4e9;
+}
 
 @media (max-width: 760px) {
   .theme-toggle { min-width: 34px; padding-inline: 7px !important; }
