@@ -27,7 +27,7 @@ type ViewId = "cockpit" | "scanner" | "derivatives" | "strategy" | "chart" | "al
 type ThemeMode = "light" | "dark";
 
 const navigation = [
-  { id: "cockpit", number: "01", label: "市場駕駛艙", eyebrow: "MARKET COCKPIT" },
+  { id: "cockpit", number: "01", label: "市場總攬", eyebrow: "MARKET COCKPIT" },
   { id: "scanner", number: "02", label: "機會掃描器", eyebrow: "OPPORTUNITY SCANNER" },
   { id: "derivatives", number: "03", label: "衍生品", eyebrow: "DERIVATIVES" },
   { id: "strategy", number: "04", label: "策略工作台", eyebrow: "STRATEGY DESK" },
