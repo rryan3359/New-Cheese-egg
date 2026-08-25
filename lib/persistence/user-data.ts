@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { getDb } from "../../db";
 import { alertEvents, alerts, journalEntries, userSettings, watchlist } from "../../db/schema";
 import type { AlertEvent, AlertRule, JournalEntry, UserDataPayload, WorkbenchSettings } from "../workbench/types";
+import { STRATEGY_NAMES } from "../market/types";
 
 export const DEFAULT_SETTINGS: WorkbenchSettings = {
   refreshSeconds: 60,
@@ -10,20 +11,24 @@ export const DEFAULT_SETTINGS: WorkbenchSettings = {
   dailyLossLimit: 300,
   defaultRiskPercent: 1,
   defaultFeeRate: 0.0005,
+  defaultSlippageRate: 0.0003,
+  minimumNetRr: 1.5,
 };
 
 let schemaReady: Promise<void> | null = null;
 
 export const LOCAL_SCHEMA_STATEMENTS = [
-  "CREATE TABLE IF NOT EXISTS alerts (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, symbol TEXT NOT NULL, enabled INTEGER NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS alerts (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, symbol TEXT NOT NULL, strategy TEXT, strategy_version INTEGER NOT NULL DEFAULT 13, strategy_legacy INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS alerts_user_idx ON alerts (user_id)",
   "CREATE UNIQUE INDEX IF NOT EXISTS alerts_user_id_unique ON alerts (user_id, id)",
+  "CREATE INDEX IF NOT EXISTS alerts_user_strategy_idx ON alerts (user_id, strategy)",
   "CREATE TABLE IF NOT EXISTS alert_events (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, alert_id TEXT NOT NULL, dedupe_key TEXT NOT NULL, symbol TEXT NOT NULL, triggered_at TEXT NOT NULL, payload TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS alert_events_user_time_idx ON alert_events (user_id, triggered_at)",
   "CREATE UNIQUE INDEX IF NOT EXISTS alert_events_user_dedupe_unique ON alert_events (user_id, dedupe_key)",
-  "CREATE TABLE IF NOT EXISTS journal_entries (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, symbol TEXT NOT NULL, strategy TEXT NOT NULL, timeframe TEXT NOT NULL, actual_pnl REAL NOT NULL, r_multiple REAL NOT NULL, trade_date TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS journal_entries (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, symbol TEXT NOT NULL, strategy TEXT NOT NULL, strategy_version INTEGER NOT NULL DEFAULT 13, strategy_legacy INTEGER NOT NULL DEFAULT 0, timeframe TEXT NOT NULL, actual_pnl REAL NOT NULL, r_multiple REAL NOT NULL, trade_date TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS journal_user_date_idx ON journal_entries (user_id, trade_date)",
   "CREATE UNIQUE INDEX IF NOT EXISTS journal_user_id_unique ON journal_entries (user_id, id)",
+  "CREATE INDEX IF NOT EXISTS journal_user_strategy_idx ON journal_entries (user_id, strategy)",
   "CREATE TABLE IF NOT EXISTS user_settings (user_id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS watchlist (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, symbol TEXT NOT NULL, created_at TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS watchlist_user_idx ON watchlist (user_id)",
@@ -40,6 +45,11 @@ export function ensureUserDataSchema() {
     throw error;
   });
   return schemaReady;
+}
+
+function markLegacy<T extends AlertRule | JournalEntry>(record: T): T {
+  const legacy = !STRATEGY_NAMES.includes(record.strategy as (typeof STRATEGY_NAMES)[number]);
+  return { ...record, strategyVersion: record.strategyVersion ?? (legacy ? 12 : 13), strategyLegacy: record.strategyLegacy ?? legacy };
 }
 
 function recordPayload<T>(payload: unknown): T {
@@ -60,9 +70,9 @@ export async function loadUserData(userId: string): Promise<UserDataPayload> {
   const savedSettings = settingsRows[0] ? recordPayload<WorkbenchSettings>(settingsRows[0].payload) : DEFAULT_SETTINGS;
   return {
     persistence: "d1",
-    alerts: alertRows.map((row) => recordPayload<AlertRule>(row.payload)),
+    alerts: alertRows.map((row) => markLegacy(recordPayload<AlertRule>(row.payload))),
     alertEvents: eventRows.map((row) => recordPayload<AlertEvent>(row.payload)),
-    journal: journalRows.map((row) => recordPayload<JournalEntry>(row.payload)),
+    journal: journalRows.map((row) => markLegacy(recordPayload<JournalEntry>(row.payload))),
     settings: { ...DEFAULT_SETTINGS, ...savedSettings, watchlist: watchRows.length ? watchRows.map((row) => row.symbol) : savedSettings.watchlist },
   };
 }
@@ -72,8 +82,8 @@ export async function saveAlert(userId: string, rule: AlertRule) {
   const now = new Date().toISOString();
   const db = getDb();
   await db.batch([
-    db.update(alerts).set({ symbol: rule.symbol, enabled: rule.enabled, payload: rule, updatedAt: now }).where(and(eq(alerts.userId, userId), eq(alerts.id, rule.id))),
-    db.insert(alerts).values({ id: rule.id, userId, symbol: rule.symbol, enabled: rule.enabled, payload: rule, createdAt: rule.createdAt, updatedAt: now }).onConflictDoNothing(),
+    db.update(alerts).set({ symbol: rule.symbol, strategy: rule.strategy, strategyVersion: rule.strategyVersion ?? 13, strategyLegacy: rule.strategyLegacy ?? false, enabled: rule.enabled, payload: rule, updatedAt: now }).where(and(eq(alerts.userId, userId), eq(alerts.id, rule.id))),
+    db.insert(alerts).values({ id: rule.id, userId, symbol: rule.symbol, strategy: rule.strategy, strategyVersion: rule.strategyVersion ?? 13, strategyLegacy: rule.strategyLegacy ?? false, enabled: rule.enabled, payload: rule, createdAt: rule.createdAt, updatedAt: now }).onConflictDoNothing(),
   ]);
 }
 
@@ -87,8 +97,8 @@ export async function saveJournalEntry(userId: string, entry: JournalEntry) {
   const now = new Date().toISOString();
   const db = getDb();
   await db.batch([
-    db.update(journalEntries).set({ symbol: entry.symbol, strategy: entry.strategy, timeframe: entry.timeframe, actualPnl: entry.actualPnl, rMultiple: entry.rMultiple, tradeDate: entry.tradeDate, payload: entry, updatedAt: now }).where(and(eq(journalEntries.userId, userId), eq(journalEntries.id, entry.id))),
-    db.insert(journalEntries).values({ id: entry.id, userId, symbol: entry.symbol, strategy: entry.strategy, timeframe: entry.timeframe, actualPnl: entry.actualPnl, rMultiple: entry.rMultiple, tradeDate: entry.tradeDate, payload: entry, createdAt: entry.createdAt, updatedAt: now }).onConflictDoNothing(),
+    db.update(journalEntries).set({ symbol: entry.symbol, strategy: entry.strategy, strategyVersion: entry.strategyVersion ?? 13, strategyLegacy: entry.strategyLegacy ?? false, timeframe: entry.timeframe, actualPnl: entry.actualPnl, rMultiple: entry.rMultiple, tradeDate: entry.tradeDate, payload: entry, updatedAt: now }).where(and(eq(journalEntries.userId, userId), eq(journalEntries.id, entry.id))),
+    db.insert(journalEntries).values({ id: entry.id, userId, symbol: entry.symbol, strategy: entry.strategy, strategyVersion: entry.strategyVersion ?? 13, strategyLegacy: entry.strategyLegacy ?? false, timeframe: entry.timeframe, actualPnl: entry.actualPnl, rMultiple: entry.rMultiple, tradeDate: entry.tradeDate, payload: entry, createdAt: entry.createdAt, updatedAt: now }).onConflictDoNothing(),
   ]);
 }
 
@@ -110,7 +120,7 @@ export async function saveAlertEvaluation(userId: string, rules: AlertRule[], ev
   if (!database) throw new Error("D1 binding DB is unavailable");
   const now = new Date().toISOString();
   const statements = [
-    ...rules.map((rule) => database.prepare("INSERT INTO alerts (id, user_id, symbol, enabled, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET symbol = excluded.symbol, enabled = excluded.enabled, payload = excluded.payload, updated_at = excluded.updated_at WHERE user_id = excluded.user_id").bind(rule.id, userId, rule.symbol, rule.enabled ? 1 : 0, JSON.stringify(rule), rule.createdAt, now)),
+    ...rules.map((rule) => database.prepare("INSERT INTO alerts (id, user_id, symbol, strategy, strategy_version, strategy_legacy, enabled, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET symbol = excluded.symbol, strategy = excluded.strategy, strategy_version = excluded.strategy_version, strategy_legacy = excluded.strategy_legacy, enabled = excluded.enabled, payload = excluded.payload, updated_at = excluded.updated_at WHERE user_id = excluded.user_id").bind(rule.id, userId, rule.symbol, rule.strategy, rule.strategyVersion ?? 13, rule.strategyLegacy ? 1 : 0, rule.enabled ? 1 : 0, JSON.stringify(rule), rule.createdAt, now)),
     ...events.map((event) => database.prepare("INSERT INTO alert_events (id, user_id, alert_id, dedupe_key, symbol, triggered_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, dedupe_key) DO NOTHING").bind(event.id, userId, event.alertId, event.dedupeKey, event.symbol, event.triggeredAt, JSON.stringify(event))),
   ];
   if (statements.length > 0) await database.batch(statements);

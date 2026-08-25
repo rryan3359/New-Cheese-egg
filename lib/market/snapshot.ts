@@ -11,17 +11,17 @@ const metricSchema = z.object({
 }).passthrough();
 
 const candleSchema = z.object({ time: z.number().finite(), open: z.number().finite(), high: z.number().finite(), low: z.number().finite(), close: z.number().finite(), volume: z.number().finite() }).strict();
-const timeframeSchema = z.object({ timeframe: z.enum(["15m", "1h", "4h", "1d"]), candles: z.array(candleSchema).max(400) }).passthrough();
+const timeframeSchema = z.object({ timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]), candles: z.array(candleSchema).max(400) }).passthrough();
 const strategySchema = z.object({
-  id: z.string().min(1).max(200), symbol: z.string().regex(/^[A-Z0-9]{2,20}$/), timeframe: z.enum(["15m", "1h", "4h", "1d"]),
-  strategy: z.enum(["Trend Pullback", "Breakout", "Volatility Squeeze", "Funding Mean Reversion", "Positioning Divergence", "ICT Liquidity Sweep", "Range Mean Reversion"]),
-  status: z.enum(["eligible", "waiting", "invalid", "missing"]), primaryRiskReward: z.number().finite().nullable(), updatedAt: z.string().datetime(),
+  id: z.string().min(1).max(200), symbol: z.string().regex(/^[A-Z0-9]{2,20}$/), timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+  strategy: z.enum(["EMA Trend", "Bollinger Breakout", "ICT / SMC"]),
+  status: z.enum(["eligible", "waiting", "applicable", "invalid", "missing"]), primaryRiskReward: z.number().finite().nullable(), updatedAt: z.string().datetime(),
 }).passthrough();
 const assetSchema = z.object({
   symbol: z.string().regex(/^[A-Z0-9]{2,20}$/),
   price: metricSchema, funding: metricSchema, openInterest: metricSchema, oiChange1h: metricSchema, positioning: metricSchema,
-  timeframes: z.object({ "15m": timeframeSchema, "1h": timeframeSchema, "4h": timeframeSchema, "1d": timeframeSchema }).strict(),
-  strategies: z.array(strategySchema).max(40),
+  timeframes: z.object({ "1m": timeframeSchema, "5m": timeframeSchema, "15m": timeframeSchema, "1h": timeframeSchema, "4h": timeframeSchema, "1d": timeframeSchema }).strict(),
+  strategies: z.array(strategySchema).max(3),
 }).passthrough();
 
 const snapshotSchema = z.object({

@@ -57,6 +57,8 @@ const oiHistSchema = z
   })
   .passthrough();
 const barMap: Record<Timeframe, string> = {
+  "1m": "1m",
+  "5m": "5m",
   "15m": "15m",
   "1h": "1H",
   "4h": "4H",
@@ -124,7 +126,10 @@ function createOkxScheduler(signal?: AbortSignal) {
   return async (url: string) => {
     if (signal?.aborted) throw okxAbortError();
     const path = new URL(url).pathname;
-    const intervalMs = path.endsWith("/candles") ? 750 : 180;
+    // OKX candles permit materially more throughput than the public account
+    // endpoints. 75 ms keeps the full 30 × 6 L3 plan inside its 20 s server
+    // deadline while remaining below the documented candles burst ceiling.
+    const intervalMs = path.endsWith("/candles") ? 75 : 120;
     const scheduledAt = Math.max(Date.now(), nextRequestAt.get(path) ?? 0);
     nextRequestAt.set(path, scheduledAt + intervalMs);
     const waitMs = scheduledAt - Date.now();
@@ -151,6 +156,9 @@ async function fetchOkx<T extends z.ZodTypeAny>(
 
 function toCandles(rows: string[][]): Candle[] {
   return rows
+    // OKX index 8 is the confirmation flag. Never let the live, unfinished bar
+    // enter strategy, level, or backtest calculations.
+    .filter((row) => row[8] === undefined || row[8] === "1")
     .map((row) => ({
       time: Number(row[0]),
       open: Number(row[1]),
@@ -184,7 +192,7 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
     : null;
   const tickerMap = new Map((tickerResult?.data.data ?? []).map((item) => [item.instId, item]));
 
-  const concurrency = Object.keys(plan.candleTimeframes).length || plan.full ? 2 : 3;
+  const concurrency = Object.keys(plan.candleTimeframes).length || plan.full ? 3 : 3;
   const assets = await mapWithConcurrency(symbols, concurrency, async (symbol): Promise<RawAsset> => {
     const base = symbol.replace("USDT", "");
     const instId = `${base}-USDT-SWAP`;

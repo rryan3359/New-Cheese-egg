@@ -8,15 +8,24 @@ function parseTier(raw: string | null): FetchTier {
   return "l2";
 }
 
+function parseRate(raw: string | null, fallback: number) {
+  const value = raw === null ? fallback : Number(raw);
+  return Number.isFinite(value) ? Math.max(0, Math.min(0.02, value)) : fallback;
+}
+
 export async function GET(request: Request) {
   const startedAt = Date.now();
   const url = new URL(request.url);
   // Compatibility alias for old bookmarked URLs. The hub is always OKX-only.
   const compatibilityAlias = url.searchParams.get("provider") === "okx";
   const tier = parseTier(url.searchParams.get("tier"));
+  const costs = {
+    feeRate: parseRate(url.searchParams.get("feeRate"), 0.0005),
+    slippageRate: parseRate(url.searchParams.get("slippageRate"), 0.0003),
+  };
   console.log("[api/crypto] request started", { compatibilityAlias, tier });
   try {
-    const payload = await getMarketHub(undefined, tier);
+    const payload = await getMarketHub(undefined, tier, costs);
     if (!payload.assets.length) throw new Error("Market Data Hub returned zero records");
     console.log("[api/crypto] request completed", {
       compatibilityAlias,

@@ -6,11 +6,11 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? (productionHost ? `https://$
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Cheese&Egg｜Crypto Decision Workbench",
-  description: "整合 OKX 永續合約行情、交易所帳戶多空傾向、七套策略計畫、風險計算與資料健康的交易決策工作台。",
+  title: "Cheese&Egg｜日內量化決策台",
+  description: "整合 OKX 已收盤永續 K 線、三套日內策略、結構目標、淨 RR、風控與資料健康的量化決策台。",
   openGraph: {
-    title: "Cheese&Egg｜Crypto Decision Workbench",
-    description: "真實行情、衍生品帳戶傾向、策略與風險管理，一個清楚的加密交易決策工作台。",
+    title: "Cheese&Egg｜日內量化決策台",
+    description: "今日市場、三套策略、真實結構目標與淨 RR；沒有好機會時，等待也是交易決策。",
     url: siteUrl,
     siteName: "Cheese&Egg",
     locale: "zh_TW",
@@ -19,13 +19,13 @@ export const metadata: Metadata = {
       url: "/og.jpg",
       width: 1200,
       height: 630,
-      alt: "Cheese&Egg Crypto Decision Workbench",
+      alt: "Cheese&Egg 日內量化決策台",
     }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Cheese&Egg｜Crypto Decision Workbench",
-    description: "真實行情、交易所帳戶多空傾向、策略與風險管理工作台。",
+    title: "Cheese&Egg｜日內量化決策台",
+    description: "OKX 已收盤行情、三套日內策略、結構目標與淨 RR。",
     images: ["/og.jpg"],
   },
 };
@@ -40,7 +40,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: "try{var t=localStorage.getItem('ce-theme-v1');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){}",
+            __html: "try{var t=localStorage.getItem('ce-theme-v1');var m=t==='dark'?'dark':'light';document.documentElement.dataset.theme=m;document.documentElement.style.colorScheme=m}catch(e){}",
           }}
         />
       </head>

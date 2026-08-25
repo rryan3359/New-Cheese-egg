@@ -1,4 +1,4 @@
-import type { StrategyName, Timeframe } from "../market/types";
+import type { StrategyReference, Timeframe } from "../market/types";
 
 export type AlertType = "price_target" | "price_range" | "breakout" | "funding" | "oi_change" | "positioning_reversal" | "strategy_eligible" | "liquidity_sweep" | "risk_reward" | "provider_health";
 export type AlertStatus = "watching" | "triggered" | "cooldown" | "missing" | "disabled";
@@ -8,7 +8,9 @@ export type AlertRule = {
   symbol: string;
   type: AlertType;
   timeframe: Timeframe;
-  strategy: StrategyName | null;
+  strategy: StrategyReference | null;
+  strategyVersion?: number;
+  strategyLegacy?: boolean;
   operator: "above" | "below" | "inside";
   threshold: number;
   thresholdUpper: number | null;
@@ -40,7 +42,9 @@ export type JournalEntry = {
   id: string;
   symbol: string;
   side: "Long" | "Short";
-  strategy: StrategyName;
+  strategy: StrategyReference;
+  strategyVersion?: number;
+  strategyLegacy?: boolean;
   timeframe: Timeframe;
   reason: string;
   entry: number;
@@ -68,6 +72,8 @@ export type WorkbenchSettings = {
   dailyLossLimit: number;
   defaultRiskPercent: number;
   defaultFeeRate: number;
+  defaultSlippageRate: number;
+  minimumNetRr: number;
 };
 
 export type UserDataPayload = {

@@ -17,6 +17,8 @@ type UseMarketDataOptions = {
   evaluateCurrentAlerts: (snapshot: MarketHubPayload) => Promise<void>;
   refreshSeconds: number;
   hydrated: boolean;
+  feeRate: number;
+  slippageRate: number;
 };
 
 const CLIENT_SNAPSHOT_TTL_MS = 24 * 60 * 60_000;
@@ -40,7 +42,7 @@ function marketFailureMessage(hasSnapshot: boolean) {
     : "目前沒有可用行情，請稍後重試";
 }
 
-export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated }: UseMarketDataOptions) {
+export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated, feeRate, slippageRate }: UseMarketDataOptions) {
   const [data, setData] = useState<MarketHubPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,7 +77,8 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
   );
 
   const fetchTier = useCallback(async (tier: FetchTier, signal: AbortSignal) => {
-    const response = await fetch(`/api/crypto?tier=${tier}`, {
+    const params = new URLSearchParams({ tier, feeRate: String(feeRate), slippageRate: String(slippageRate) });
+    const response = await fetch(`/api/crypto?${params}`, {
       cache: "no-store",
       signal,
     });
@@ -84,7 +87,7 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated 
       throw new Error("MARKET_UNAVAILABLE");
     }
     return payload;
-  }, []);
+  }, [feeRate, slippageRate]);
 
   const fetchTierWithDeadline = useCallback(
     async (tier: FetchTier, parentSignal?: AbortSignal) => {

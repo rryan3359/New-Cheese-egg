@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { StrategyName, Timeframe } from "../lib/market/types";
+import type { StrategyName, StrategyResult, Timeframe } from "../lib/market/types";
 import type { AlertRule, JournalEntry, WorkbenchSettings } from "../lib/workbench/types";
 import { defaultSettings, parseStored, storageKeys, writeStored } from "./hooks/storage";
 import { useAlerts } from "./hooks/useAlerts";
@@ -27,7 +27,7 @@ type ViewId = "cockpit" | "scanner" | "derivatives" | "strategy" | "chart" | "al
 type ThemeMode = "light" | "dark";
 
 const navigation = [
-  { id: "cockpit", number: "01", label: "市場駕駛艙", eyebrow: "MARKET COCKPIT" },
+  { id: "cockpit", number: "01", label: "今日作戰台", eyebrow: "TODAY'S QUANT DESK" },
   { id: "scanner", number: "02", label: "機會掃描器", eyebrow: "OPPORTUNITY SCANNER" },
   { id: "derivatives", number: "03", label: "衍生品", eyebrow: "DERIVATIVES" },
   { id: "strategy", number: "04", label: "策略工作台", eyebrow: "STRATEGY DESK" },
@@ -73,6 +73,8 @@ export default function CryptoWorkbench() {
     evaluateCurrentAlerts,
     refreshSeconds: settings.refreshSeconds,
     hydrated,
+    feeRate: settings.defaultFeeRate,
+    slippageRate: settings.defaultSlippageRate,
   });
 
   useDebouncedPersist(storageKeys.alerts, alerts, hydrated);
@@ -116,6 +118,7 @@ export default function CryptoWorkbench() {
     const collapsed = parseStored<boolean>(storageKeys.sidebar, false);
     const savedTheme = localStorage.getItem(storageKeys.theme) === "dark" ? "dark" : "light";
     document.documentElement.dataset.theme = savedTheme;
+    document.documentElement.style.colorScheme = savedTheme;
     hydrateFromCache();
 
     queueMicrotask(() => {
@@ -163,6 +166,7 @@ export default function CryptoWorkbench() {
     setTheme((current) => {
       const next = current === "light" ? "dark" : "light";
       document.documentElement.dataset.theme = next;
+      document.documentElement.style.colorScheme = next;
       localStorage.setItem(storageKeys.theme, next);
       return next;
     });
@@ -176,6 +180,16 @@ export default function CryptoWorkbench() {
     setAlertEvents((current) => current.filter((item) => item.alertId !== id));
     void deleteRecord("alert", id);
   };
+  const createSetupAlert = (setup: StrategyResult) => {
+    const now = new Date().toISOString();
+    upsertAlert({
+      id: crypto.randomUUID(), symbol: setup.symbol, type: "strategy_eligible", timeframe: setup.timeframe,
+      strategy: setup.strategy, strategyVersion: 13, strategyLegacy: false, operator: "above", threshold: 2,
+      thresholdUpper: null, referenceValue: null, enabled: true, cooldownMinutes: 60, dedupeKey: null,
+      lastEvaluatedAt: null, lastTriggeredAt: null, triggerCount: 0, currentStatus: "watching",
+      lastReason: "等待策略條件完整且淨 RR 至少 2", createdAt: now,
+    });
+  };
   const upsertJournal = (entry: JournalEntry) => {
     setJournal((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
     void persistRecord("journal", entry);
@@ -185,17 +199,23 @@ export default function CryptoWorkbench() {
     void deleteRecord("journal", id);
   };
   const updateSettings = (next: WorkbenchSettings) => setSettings(next);
+  const toggleWatchlist = (symbol: string) => setSettings((current) => ({
+    ...current,
+    watchlist: current.watchlist.includes(symbol) ? current.watchlist.filter((item) => item !== symbol) : [...current.watchlist, symbol],
+  }));
   const toggleMobileMore = useCallback(() => setMobileMoreOpen((current) => !current), []);
   const closeMobileMore = useCallback(() => setMobileMoreOpen(false), []);
 
   const healthTone = useMemo((): "live" | "stale" | "missing" => {
     if (!data) return "missing";
     if (error) return "stale";
-    if (data?.health.some((provider) => provider.state === "missing" || provider.state === "stale")) return "stale";
+    const marketProvider = data.health.find((provider) => provider.name === "OKX");
+    if (!marketProvider || marketProvider.state === "missing") return "missing";
+    if (marketProvider.state === "stale" || data.pipeline.stage === "showing-stale") return "stale";
     return "live";
   }, [data, error]);
 
-  const activeLabel = navigation.find((item) => item.id === activeView)?.label ?? "市場駕駛艙";
+  const activeLabel = navigation.find((item) => item.id === activeView)?.label ?? "今日作戰台";
   const updatedAt = data ? new Date(data.updatedAt).toLocaleTimeString("zh-TW", { hour12: false }) : "—";
   const warningCount = data?.health.filter((provider) => provider.state === "missing" || provider.state === "stale").length ?? (error ? 1 : 0);
   const triggeredCount = alerts.filter((alert) => alert.currentStatus === "triggered").length;
@@ -242,7 +262,7 @@ export default function CryptoWorkbench() {
       case "settings":
         return <SettingsView settings={settings} persistence={persistence} onChange={updateSettings} data={data} />;
       case "scanner":
-        return data ? <ScannerView data={data} watchlist={settings.watchlist} onOpenChart={openChart} /> : marketUnavailable("機會掃描器");
+        return data ? <ScannerView data={data} watchlist={settings.watchlist} minimumNetRr={settings.minimumNetRr} onOpenChart={openChart} /> : marketUnavailable("機會掃描器");
       case "derivatives":
         return data ? <DerivativesView data={data} /> : marketUnavailable("衍生品");
       case "strategy":
@@ -261,7 +281,7 @@ export default function CryptoWorkbench() {
           />
         ) : marketUnavailable("圖表決策");
       default:
-        return data ? <CockpitView data={data} watchlist={settings.watchlist} onNavigate={navigate} onOpenChart={openChart} /> : marketUnavailable("市場駕駛艙");
+        return data ? <CockpitView data={data} watchlist={settings.watchlist} onNavigate={navigate} onOpenChart={openChart} onCreateAlert={createSetupAlert} onToggleWatchlist={toggleWatchlist} /> : marketUnavailable("市場駕駛艙");
     }
   };
 
@@ -314,7 +334,7 @@ export default function CryptoWorkbench() {
           />
           {renderView()}
           <footer className="workbench-footer">
-            <span>Cheese&Egg · 看懂市場，再決定是否交易。</span>
+            <span>Cheese&Egg · 日內量化決策台</span>
             <span>僅供研究與風險規劃，不構成投資建議</span>
           </footer>
         </div>

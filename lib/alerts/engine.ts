@@ -1,4 +1,4 @@
-import type { AssetSnapshot, MarketHubPayload, StrategyResult } from "../market/types";
+import { resolveActiveStrategy, type AssetSnapshot, type MarketHubPayload, type StrategyResult } from "../market/types";
 import type { AlertEvent, AlertRule, AlertStatus } from "../workbench/types";
 
 export type AlertEvaluation = {
@@ -23,7 +23,9 @@ function compare(value: number, rule: AlertRule) {
 }
 
 function selectedStrategy(asset: AssetSnapshot, rule: AlertRule): StrategyResult | null {
-  return asset.strategies.find((strategy) => strategy.timeframe === rule.timeframe && (!rule.strategy || strategy.strategy === rule.strategy)) ?? null;
+  const active = resolveActiveStrategy(rule.strategy);
+  if (rule.strategy && !active) return null;
+  return asset.strategies.find((strategy) => active ? strategy.strategy === active : strategy.timeframe === rule.timeframe) ?? null;
 }
 
 function missing(reason: string): Observation {
@@ -74,17 +76,17 @@ function observe(rule: AlertRule, data: MarketHubPayload): Observation {
       return { available: reference !== null, matched: reversed, value: asset.positioning.value, reason: reference === null ? "需要先記錄 Positioning 參考值" : `${asset.symbol} Positioning ${reference.toFixed(1)} → ${asset.positioning.value.toFixed(1)}`, snapshotKey: asset.positioning.updatedAt };
     }
     case "strategy_eligible": {
-      if (!strategy) return missing("找不到指定策略或週期");
-      return { available: strategy.status !== "missing", matched: strategy.status === "eligible", value: strategy.confidence, reason: `${strategy.strategy} ${strategy.timeframe} 為 ${strategy.status}，信心 ${strategy.confidence}%`, snapshotKey: `${strategy.updatedAt}:${candleKey}:${strategy.status}` };
+      if (!strategy) return missing(rule.strategy && !resolveActiveStrategy(rule.strategy) ? "此舊策略已標為 legacy，不再產生新方向或觸發" : "找不到指定策略或週期");
+      return { available: strategy.status !== "missing", matched: strategy.status === "eligible" && strategy.eligibleForScanner, value: strategy.confidence, reason: `${strategy.strategy} ${strategy.timeframe} 為 ${strategy.status}，淨 RR ${strategy.primaryRiskReward?.toFixed(2) ?? "N/A"}R`, snapshotKey: `${strategy.updatedAt}:${candleKey}:${strategy.status}` };
     }
     case "liquidity_sweep": {
-      const sweep = asset.strategies.find((item) => item.strategy === "ICT Liquidity Sweep" && item.timeframe === rule.timeframe);
-      if (!sweep) return missing("ICT Liquidity Sweep 策略資料缺失");
-      return { available: sweep.status !== "missing", matched: sweep.status === "eligible", value: sweep.confidence, reason: `流動性掃描 ${sweep.status}：${sweep.reasons[0] ?? sweep.trigger}`, snapshotKey: `${sweep.updatedAt}:${candleKey}:${sweep.status}` };
+      const sweep = asset.events.find((event) => event.kind === "liquidity_sweep");
+      if (!sweep) return { available: true, matched: false, value: null, reason: "尚未偵測到已收盤 K 線的流動性掃蕩", snapshotKey: candleKey };
+      return { available: true, matched: true, value: asset.price.value, reason: sweep.headline, snapshotKey: `${sweep.id}:${sweep.occurredAt}` };
     }
     case "risk_reward": {
       if (!strategy || strategy.primaryRiskReward === null) return missing("策略風報比尚不可計算");
-      return { available: true, matched: compare(strategy.primaryRiskReward, rule), value: strategy.primaryRiskReward, reason: `${strategy.strategy} ${strategy.timeframe} ${strategy.primaryTarget ?? "主要目標"} 風報比 ${strategy.primaryRiskReward.toFixed(2)}R`, snapshotKey: `${strategy.updatedAt}:${candleKey}:${strategy.status}` };
+      return { available: true, matched: compare(strategy.primaryRiskReward, rule), value: strategy.primaryRiskReward, reason: `${strategy.strategy} ${strategy.timeframe} ${strategy.primaryTarget ?? "主要目標"} 淨 RR ${strategy.primaryRiskReward.toFixed(2)}R`, snapshotKey: `${strategy.updatedAt}:${candleKey}:${strategy.status}` };
     }
     case "breakout": {
       if (!timeframe || !lastCandle) return missing(`${rule.timeframe} K 線資料缺失`);

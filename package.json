@@ -13,6 +13,7 @@
     "start": "next start",
     "start:sites": "vinext start",
     "test": "node tests/run-tests.mjs",
+    "backtest": "node scripts/run-backtest.mjs",
     "lint": "eslint app lib tests",
     "db:generate": "drizzle-kit generate"
   },

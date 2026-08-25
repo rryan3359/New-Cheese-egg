@@ -1,76 +1,72 @@
-# Cheese&Egg v12
+# Cheese&Egg v13 · 日內量化決策台
 
-Cheese&Egg 是以繁體中文呈現的加密交易決策工作台。專案保留七套策略、Trade Plan、風險計算、警報、交易日誌、D1、TradingView 版面與既有 Cheese／Egg 品牌。
+Cheese&Egg v13 延續原有橘色品牌、Sidebar、手機導覽、深淺主題、OKX Market Hub、D1、警報、風控、日誌、資料健康與漸進載入。首頁改為「今日作戰台」：先說明市場狀態、交易時段與剛發生的事件，再列出三套策略狀態和最多五個通過淨 RR 初篩的機會。沒有合格機會時會明確顯示「目前不適合交易／等待也是交易決策」。
+
+## 三套策略
+
+1. `EMA Trend`（均線順勢）：1H／4H EMA20、EMA50 與斜率決定 Bias；15m 回踩與重新站穩，5m 結構確認。
+2. `Bollinger Breakout`（布林帶波動突破）：BB Width 低百分位後擴張，收盤突破、量能確認並優先等待回測。
+3. `ICT / SMC`：1H／4H Bias；1m／5m／15m 執行資料；嚴格依序驗證 Sweep → Displacement → MSS/BOS → FVG/OB 回踩。
+
+Funding、OI、全體／大戶帳戶比及 Positioning 只作背景，不會成為第四套策略或單獨產生方向。舊七策略的警報與日誌不會被刪除：D1 migration 會標示 `strategy_version=12`、`strategy_legacy=1`；有合理對應者可由警報引擎相容映射，已退役者維持 legacy／missing，不再產生方向。
+
+## RR 與機會語意
+
+- 先建立進場區、結構失效 Stop、真實前高低／session／liquidity 目標，再算 RR。
+- Long 使用進場區上緣、Short 使用下緣，採最不利價格。
+- 淨 RR 扣除可設定的雙邊手續費與雙邊滑價；TP1／TP2／TP3 各自顯示實際淨 RR。
+- 淨 RR `<1.5`：淘汰，不進 Scanner 機會榜。
+- `1.5–<2`：形成中／觀察。
+- `≥2`：只有策略條件完整才可執行。
+- 不以 ATR 倍數或人工拉遠 TP 湊足 2R。Scanner 最低淨 RR 預設並鎖定不低於 1.5。
 
 ## 資料信任原則
 
-- Market Data Hub 僅使用 OKX 公開永續合約資料；不需要交易所 API key。
-- 價格、Funding、OI、多空比、K 線或衍生指標缺少時顯示 `N/A`／資料不足，不會補成 0，也不會據此產生方向訊號。
-- 最近成功快照可在短暫故障時以 stale 狀態保留，畫面會標示最後成功時間。
-- `provider=okx` 只為舊網址相容而保留，和一般請求使用相同 OKX 管線與 tier 快取，不是備援測試。
-- TradingView Widget 目前可能顯示 `BINANCE:<symbol>` 圖表；策略數字仍來自 OKX Market Data Hub。兩者不保證完全一致，Entry、Stop、TP 與 RR 一律以 Trade Plan 為準。
+- 公開市場資料只使用 OKX USDT 永續；不需要交易所 API key。
+- OKX `confirm=1` 的已收盤 K 線才可進入策略、session level 與回測。
+- 策略與 TradingView 都指定 OKX 永續；策略位只由 Market Data Hub 生成，不使用 TradingView 畫面價格反推。
+- 1m、5m、15m、1h、4h、1d 均保留 null／missing 語意；缺值不補 0、不推方向、不建立機會。
+- PDH/PDL、PWH/PWL、亞洲／倫敦／紐約盤高低、EQH/EQL 與 swing liquidity 由 K 線計算。時間以 UTC 儲存，時段使用 IANA timezone（含紐約 DST）。
+- 前端保留 stale-good-data、`AbortController`、request identity、`Promise.allSettled` 與分頁隱藏暫停刷新。
 
-## 環境需求
+## 安裝與執行
 
-- Node.js 22.x（見 `.nvmrc` 與 `package.json#engines`）
-- npm
-
-首次安裝：
+需求：Node.js 22.x（`.nvmrc`／`package.json#engines`）與 npm。
 
 ```bash
 npm ci
-```
-
-## 主要執行路徑：Next.js／Vercel
-
-```bash
 npm run dev
-npm run build
-npm run start
 ```
 
-本機開發預設為 `http://localhost:3000`。`vercel.json` 以 `npm ci` 安裝並執行 `npm run build`。
-
-## 次要執行路徑：Sites／Vinext
+Sites／Vinext：
 
 ```bash
 npm run dev:sites
 npm run build:sites
-npm run start:sites
 ```
 
-`.openai/hosting.json` 保留既有 Sites `project_id` 與 D1 `DB` binding。不要重新初始化 Sites 專案或替換該 metadata。
+`.openai/hosting.json` 保留原 `project_id` 與 D1 `DB` binding；不得重新初始化或替換。
 
-## 漸進式行情流程
+## 可重複回測
 
-1. L1 先取得優先市場關鍵行情，成功後立即顯示市場駕駛艙。
-2. L2 與 L3 並行補齊衍生品和 K 線／策略資料。
-3. 每個 tier 使用獨立 fresh cache、in-flight request coalescing 與 stale-good-data fallback。
-4. 單一 tier 失敗時保留其他 tier 的成功結果；分頁隱藏時暫停更新，恢復可見後再安全刷新。
-5. 警報使用畫面相同快照判定，但不阻塞第一批行情顯示。
-
-行情完全不可用時，市場駕駛艙、掃描器、衍生品、策略與圖表顯示專屬 unavailable 狀態；設定、交易日誌、警報歷史、資料健康與離線風險試算仍可開啟。
-
-## 使用者資料與 D1
-
-- Sites 路徑可透過既有 D1 binding 保存使用者資料。
-- Next.js／Vercel 沒有該 D1 binding 時會誠實降級為裝置端保存，不影響公開行情。
-- D1 schema：`db/schema.ts`
-- D1 migration：`drizzle/0000_user_workbench.sql`
-
-## 環境變數
-
-複製 `.env.example` 為本機 `.env.local`（如需覆寫）。市場資料只使用：
-
-```text
-OKX_BASE_URL=https://www.okx.com
+```bash
+npm run backtest
+npm run backtest -- --input path/to/okx-candles.json --output reports/my-report.json
 ```
 
-Telegram 設定為選填且只能放在伺服器端。請勿提交 `.env`、token、cookie 或 API key。
+輸入是 `BacktestDataset[]`，每筆包含 `symbol` 與六週期 `candlesByTimeframe`。引擎逐根截斷資料，只在訊號後下一根起以最不利進場邊界成交；同一根同時碰 Stop／Target 時先計 Stop，並計入費用與滑價。輸出交易數、勝率、平均 R、Expectancy、Profit Factor、最大回撤，按幣種、週期、時段與市場狀態拆分，並比較不設 RR、1.5R、2R。
 
-## 正式驗證
+未傳 `--input` 時只跑確定性 synthetic smoke fixture，產生 `reports/backtest-v13-sample.json`。它目前標示樣本不足，僅驗證引擎可重複執行，不是策略有效或獲利證據。真實結論必須使用足量、固定版本的 OKX 歷史資料；任何切片少於 30 筆都會標示不足。
 
-使用 Node.js 22.x 依序執行：
+## D1
+
+- Schema：`db/schema.ts`
+- 初始 migration：`drizzle/0000_user_workbench.sql`
+- v13 相容 migration：`drizzle/0001_v13_strategy_compat.sql`
+
+Next.js／沒有 Sites 身分或 D1 時會誠實降級為裝置端保存。`.openai/hosting.json` 的 `project_id` 與 `DB` binding 維持不變。
+
+## 正式驗證順序
 
 ```bash
 npm ci
@@ -81,8 +77,4 @@ npm run build
 npm run build:sites
 ```
 
-兩條 build 是不同執行路徑；Sites build 通過不能取代 TypeScript、測試、lint 或 Next.js build。
-
-## 免責聲明
-
-本專案僅供研究、紀錄與風險規劃，不構成投資建議，也不會要求交易權限。
+本專案只讀公開行情，不含自動下單、交易所私鑰或私有 API key。

@@ -5,6 +5,8 @@ import type { Timeframe } from "../../lib/market/types";
 
 /** Map workbench timeframes to TradingView interval strings. */
 const TV_INTERVAL: Record<Timeframe, string> = {
+  "1m": "1",
+  "5m": "5",
   "15m": "15",
   "1h": "60",
   "4h": "240",
@@ -12,13 +14,11 @@ const TV_INTERVAL: Record<Timeframe, string> = {
 };
 
 /**
- * Prefer Binance perpetual-style symbol for TV.
- * Workbench symbols are like BTCUSDT; TV Advanced Chart expects e.g. BINANCE:BTCUSDT.
- * Exchange may differ from strategy data source — UI does not claim they are identical.
+ * Match the OKX USDT perpetual used by Market Data Hub.
  */
 function toTvSymbol(symbol: string): string {
   const clean = symbol.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-  return `BINANCE:${clean}`;
+  return `OKX:${clean}.P`;
 }
 
 type TradingViewWidgetProps = {
@@ -160,9 +160,9 @@ export default function TradingViewWidget({
         data-timeframe={timeframe}
       />
       <div className="tv-source-note" role="note" aria-label="圖表與策略資料來源說明">
-        <span><b>圖表來源</b> TradingView · {toTvSymbol(symbol)} · {timeframe}</span>
-        <span><b>策略資料來源</b> OKX · Cheese&amp;Egg Market Data Hub</span>
-        <p>圖表與策略可能來自不同交易所，價格與 K 線不保證完全一致。Trade Plan 的 Entry、Stop、TP 與 RR 一律以 Market Data Hub 計畫卡為準。</p>
+        <span><b>圖表來源</b> TradingView · OKX 永續 · {timeframe}</span>
+        <span><b>策略來源</b> OKX 公開永續 K 線 · Cheese&amp;Egg Market Data Hub</span>
+        <p>兩者皆指定 OKX 合約；策略位只由 Market Data Hub 的已收盤 K 線生成，不使用 TradingView 畫面價格反推。</p>
       </div>
     </div>
   );

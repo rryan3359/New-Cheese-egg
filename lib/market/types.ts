@@ -1,9 +1,7 @@
-export const TIMEFRAMES = ["15m", "1h", "4h", "1d"] as const;
+export const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 export type Timeframe = (typeof TIMEFRAMES)[number];
 export type DataState = "live" | "stale" | "missing";
 export type MetricSource = "OKX" | "Alternative.me" | "Calculated";
-
-/** Request tier for progressive loading */
 export type FetchTier = "l1" | "l2" | "l3";
 
 export type Metric<T> = {
@@ -15,15 +13,7 @@ export type Metric<T> = {
   reason: string | null;
 };
 
-export type Candle = {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-};
-
+export type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 export type CandleMap = Record<Timeframe, Candle[]>;
 
 export type RawAsset = {
@@ -44,16 +34,29 @@ export type RawAsset = {
   errors: string[];
 };
 
-export type StrategyName =
-  | "Trend Pullback"
-  | "Breakout"
-  | "Volatility Squeeze"
-  | "Funding Mean Reversion"
-  | "Positioning Divergence"
-  | "ICT Liquidity Sweep"
-  | "Range Mean Reversion";
+export type StrategyName = "EMA Trend" | "Bollinger Breakout" | "ICT / SMC";
+export const STRATEGY_NAMES: StrategyName[] = ["EMA Trend", "Bollinger Breakout", "ICT / SMC"];
+export type LegacyStrategyName = "Trend Pullback" | "Breakout" | "Volatility Squeeze" | "Funding Mean Reversion" | "Positioning Divergence" | "ICT Liquidity Sweep" | "Range Mean Reversion";
+export type StrategyReference = StrategyName | LegacyStrategyName;
+export const LEGACY_STRATEGY_MAP: Record<LegacyStrategyName, StrategyName | null> = {
+  "Trend Pullback": "EMA Trend",
+  Breakout: "Bollinger Breakout",
+  "Volatility Squeeze": "Bollinger Breakout",
+  "Funding Mean Reversion": null,
+  "Positioning Divergence": null,
+  "ICT Liquidity Sweep": "ICT / SMC",
+  "Range Mean Reversion": null,
+};
 
-export type StrategyStatus = "eligible" | "waiting" | "invalid" | "missing";
+export function resolveActiveStrategy(value: StrategyReference | null): StrategyName | null {
+  if (value === null) return null;
+  if ((STRATEGY_NAMES as string[]).includes(value)) return value as StrategyName;
+  return LEGACY_STRATEGY_MAP[value as LegacyStrategyName] ?? null;
+}
+
+export type StrategyStatus = "eligible" | "waiting" | "applicable" | "invalid" | "missing";
+export type TradeCosts = { feeRate: number; slippageRate: number };
+export const DEFAULT_TRADE_COSTS: TradeCosts = { feeRate: 0.0005, slippageRate: 0.0003 };
 
 export type StrategyResult = {
   id: string;
@@ -69,15 +72,24 @@ export type StrategyResult = {
   tp1: number | null;
   tp2: number | null;
   tp3: number | null;
+  /** Backward-compatible alias; always the primary net RR in v13. */
   riskReward: number | null;
   riskRewardTp1: number | null;
   riskRewardTp2: number | null;
   riskRewardTp3: number | null;
   primaryRiskReward: number | null;
+  grossRiskRewardTp1: number | null;
+  grossRiskRewardTp2: number | null;
+  grossRiskRewardTp3: number | null;
   primaryTarget: "TP1" | "TP2" | "TP3" | null;
   entryBasis: "conservative-boundary" | null;
+  feeRate: number;
+  slippageRate: number;
+  roundTripCostRate: number;
+  eligibleForScanner: boolean;
   trigger: string;
   invalidation: string;
+  targetBasis: string;
   reasons: string[];
   missingConditions: string[];
   requiredData: string[];
@@ -110,6 +122,37 @@ export type TimeframeSnapshot = {
   volatility: Metric<"High" | "Normal" | "Low">;
 };
 
+export type SessionLevel = {
+  id: string;
+  label: string;
+  kind: "PDH" | "PDL" | "PWH" | "PWL" | "ASIA_HIGH" | "ASIA_LOW" | "LONDON_HIGH" | "LONDON_LOW" | "NEW_YORK_HIGH" | "NEW_YORK_LOW" | "EQH" | "EQL" | "SWING_HIGH" | "SWING_LOW";
+  price: number;
+  startedAt: string;
+  endedAt: string;
+  sourceTimeframe: Timeframe;
+};
+
+export type MarketEvent = {
+  id: string;
+  symbol: string;
+  kind: "liquidity_sweep" | "mss" | "bos" | "bb_expansion" | "funding_anomaly" | "oi_anomaly";
+  direction: "Long" | "Short" | "Neutral";
+  headline: string;
+  detail: string;
+  occurredAt: string;
+  source: "OKX" | "Calculated";
+  confidence: "high" | "medium" | "low";
+};
+
+export type SessionContext = {
+  name: "Asia" | "London" | "New York" | "Off-session";
+  label: string;
+  timezone: string;
+  localTime: string;
+  opensAt: string | null;
+  closesAt: string | null;
+};
+
 export type AssetSnapshot = {
   symbol: string;
   name: string;
@@ -128,6 +171,8 @@ export type AssetSnapshot = {
   topRatio: Metric<number>;
   positioning: Metric<number>;
   timeframes: Record<Timeframe, TimeframeSnapshot>;
+  sessionLevels: SessionLevel[];
+  events: MarketEvent[];
   strategies: StrategyResult[];
   setup: StrategyResult | null;
 };
@@ -144,10 +189,7 @@ export type ProviderHealth = {
   errors: string[];
 };
 
-export type PipelineStage =
-  | "using-okx"
-  | "showing-stale";
-
+export type PipelineStage = "using-okx" | "showing-stale";
 export type MarketHubPayload = {
   success: boolean;
   updatedAt: string;
@@ -156,7 +198,9 @@ export type MarketHubPayload = {
   assets: AssetSnapshot[];
   fearGreed: Metric<{ value: number; label: string }>;
   breadth: { advancing: number; declining: number; total: number };
-  regime: string;
+  regime: "Trend Up" | "Trend Down" | "Compression" | "Liquidity Sweep" | "High Volatility" | "No Trade" | "N/A";
+  session: SessionContext;
+  recentEvents: MarketEvent[];
   riskAlerts: string[];
   health: ProviderHealth[];
   recentErrors: string[];
@@ -165,19 +209,13 @@ export type MarketHubPayload = {
     mode: "normal";
     tier: FetchTier;
     marketApiDurationMs: number;
-    binanceDurationMs: number | null;
+    binanceDurationMs: null;
     okxDurationMs: number | null;
     okxFetchedFields: string[];
   };
 };
 
 export type ProviderPayload = { assets: RawAsset[]; health: ProviderHealth };
-
-/**
- * OKX fetch plan for progressive market-data tiers.
- * - full: fetch all fields for the configured symbols
- * - otherwise only listed symbols + field groups are fetched
- */
 export type OkxFetchPlan = {
   full: boolean;
   symbols: string[];
@@ -187,14 +225,15 @@ export type OkxFetchPlan = {
   candleTimeframes: Partial<Record<string, Timeframe[]>>;
 };
 
-/** Shorter defaults after TradingView takeover — strategy-oriented depth */
 export const CANDLE_LIMITS: Record<Timeframe, number> = {
-  "15m": 80,
-  "1h": 100,
-  "4h": 80,
+  "1m": 240,
+  "5m": 240,
+  "15m": 240,
+  "1h": 240,
+  "4h": 160,
   "1d": 120,
 };
 
 export function emptyCandleMap(): CandleMap {
-  return { "15m": [], "1h": [], "4h": [], "1d": [] };
+  return { "1m": [], "5m": [], "15m": [], "1h": [], "4h": [], "1d": [] };
 }

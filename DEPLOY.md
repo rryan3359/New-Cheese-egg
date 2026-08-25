@@ -1,4 +1,4 @@
-# Cheese&Egg v12 執行與部署文件
+# Cheese&Egg v13 執行與部署文件
 
 本專案以 Next.js／Vercel 為主要路徑，Sites／Vinext 為保留 D1 能力的次要路徑。兩者共用同一份應用程式碼，但 build 指令與執行環境不同。
 
@@ -8,6 +8,7 @@
 - 使用已提交的 `package-lock.json`
 - 安裝指令為 `npm ci`
 - Market Data Hub 僅使用 OKX 公開端點
+- 策略與圖表均使用 OKX K 線；Funding／OI／Positioning 僅為背景
 - 伺服器秘密只放在平台環境變數，不提交 `.env`
 
 正式檢查：
@@ -75,12 +76,14 @@ npm run start:sites
 
 - `db/schema.ts`
 - `drizzle/0000_user_workbench.sql`
+- `drizzle/0001_v13_strategy_compat.sql`
 
 ## 發布前人工檢查
 
 - `/api/crypto?tier=l1` 回傳 OKX live 或明確 stale 狀態，且不洩漏內部錯誤。
 - 桌面、390×844、430×932；淺色與深色主題。
-- 市場頁、掃描器、衍生品、策略、圖表、警報、風險、日誌、資料健康與設定。
+- 今日作戰台、掃描器、衍生品、三策略、圖表、警報、風險、日誌、資料健康與設定。
+- Scanner 最低淨 RR 預設 1.5，無合格機會時明確顯示 No Trade。
 - 行情失敗時，設定、日誌、警報歷史、資料健康與風險試算仍可操作。
 - 手機更多選單支援 Escape、focus trap、焦點返回、背景點擊關閉與背景捲動鎖定。
 - 頁面沒有水平溢位，瀏覽器沒有 React、Next、hydration 或 console error。

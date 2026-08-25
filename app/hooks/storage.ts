@@ -6,10 +6,12 @@ export const defaultSettings: WorkbenchSettings = {
   dailyLossLimit: 300,
   defaultRiskPercent: 1,
   defaultFeeRate: 0.0005,
+  defaultSlippageRate: 0.0003,
+  minimumNetRr: 1.5,
 };
 
 export const storageKeys = {
-  data: "ce-market-cache-v4",
+  data: "ce-market-cache-v13",
   alerts: "ce-alerts-v3",
   alertEvents: "ce-alert-events-v3",
   journal: "ce-journal-v3",

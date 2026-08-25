@@ -1,0 +1,205 @@
+{
+  "dataset": "deterministic-smoke-fixture (synthetic; not evidence of profitability)",
+  "report": {
+    "generatedAt": "2026-08-25T05:53:01.361Z",
+    "assumptions": [
+      "Signal bar and every higher-timeframe bar must be closed before evaluation; no look-ahead.",
+      "Entry is eligible from the next bar only and must touch the worst entry-zone boundary within three bars.",
+      "Round-trip fees and slippage are deducted; a bar touching stop and target is counted as stop-first.",
+      "Targets are the strategy's observed structural/liquidity levels; no target is extended to manufacture R.",
+      "Fewer than 30 trades in any slice is labelled insufficient and is not evidence of effectiveness."
+    ],
+    "comparisons": [
+      {
+        "strategy": "EMA Trend",
+        "minimumNetRr": 0,
+        "metrics": {
+          "trades": 0,
+          "wins": 0,
+          "winRate": null,
+          "averageR": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "maxDrawdownR": null,
+          "sampleSufficient": false,
+          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+        },
+        "breakdown": {
+          "bySymbol": [],
+          "byTimeframe": [],
+          "bySession": [],
+          "byRegime": []
+        }
+      },
+      {
+        "strategy": "EMA Trend",
+        "minimumNetRr": 1.5,
+        "metrics": {
+          "trades": 0,
+          "wins": 0,
+          "winRate": null,
+          "averageR": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "maxDrawdownR": null,
+          "sampleSufficient": false,
+          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+        },
+        "breakdown": {
+          "bySymbol": [],
+          "byTimeframe": [],
+          "bySession": [],
+          "byRegime": []
+        }
+      },
+      {
+        "strategy": "EMA Trend",
+        "minimumNetRr": 2,
+        "metrics": {
+          "trades": 0,
+          "wins": 0,
+          "winRate": null,
+          "averageR": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "maxDrawdownR": null,
+          "sampleSufficient": false,
+          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+        },
+        "breakdown": {
+          "bySymbol": [],
+          "byTimeframe": [],
+          "bySession": [],
+          "byRegime": []
+        }
+      },
+      {
+        "strategy": "Bollinger Breakout",
+        "minimumNetRr": 0,
+        "metrics": {
+          "trades": 0,
+          "wins": 0,
+          "winRate": null,
+          "averageR": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "maxDrawdownR": null,
+          "sampleSufficient": false,
+          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+        },
+        "breakdown": {
+          "bySymbol": [],
+          "byTimeframe": [],
+          "bySession": [],
+          "byRegime": []
+        }
+      },
+      {
+        "strategy": "Bollinger Breakout",
+        "minimumNetRr": 1.5,
+        "metrics": {
+          "trades": 0,
+          "wins": 0,
+          "winRate": null,
+          "averageR": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "maxDrawdownR": null,
+          "sampleSufficient": false,
+          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+        },
+        "breakdown": {
+          "bySymbol": [],
+          "byTimeframe": [],
+          "bySession": [],
+          "byRegime": []
+        }
+      },
+      {
+        "strategy": "Bollinger Breakout",
+        "minimumNetRr": 2,
+        "metrics": {
+          "trades": 0,
+          "wins": 0,
+          "winRate": null,
+          "averageR": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "maxDrawdownR": null,
+          "sampleSufficient": false,
+          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+        },
+        "breakdown": {
+          "bySymbol": [],
+          "byTimeframe": [],
+          "bySession": [],
+          "byRegime": []
+        }
+      },
+      {
+        "strategy": "ICT / SMC",
+        "minimumNetRr": 0,
+        "metrics": {
+          "trades": 0,
+          "wins": 0,
+          "winRate": null,
+          "averageR": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "maxDrawdownR": null,
+          "sampleSufficient": false,
+          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+        },
+        "breakdown": {
+          "bySymbol": [],
+          "byTimeframe": [],
+          "bySession": [],
+          "byRegime": []
+        }
+      },
+      {
+        "strategy": "ICT / SMC",
+        "minimumNetRr": 1.5,
+        "metrics": {
+          "trades": 0,
+          "wins": 0,
+          "winRate": null,
+          "averageR": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "maxDrawdownR": null,
+          "sampleSufficient": false,
+          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+        },
+        "breakdown": {
+          "bySymbol": [],
+          "byTimeframe": [],
+          "bySession": [],
+          "byRegime": []
+        }
+      },
+      {
+        "strategy": "ICT / SMC",
+        "minimumNetRr": 2,
+        "metrics": {
+          "trades": 0,
+          "wins": 0,
+          "winRate": null,
+          "averageR": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "maxDrawdownR": null,
+          "sampleSufficient": false,
+          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+        },
+        "breakdown": {
+          "bySymbol": [],
+          "byTimeframe": [],
+          "bySession": [],
+          "byRegime": []
+        }
+      }
+    ],
+    "trades": []
+  }
+}

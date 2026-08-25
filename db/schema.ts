@@ -6,6 +6,9 @@ export const alerts = sqliteTable(
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     symbol: text("symbol").notNull(),
+    strategy: text("strategy"),
+    strategyVersion: integer("strategy_version").notNull().default(13),
+    strategyLegacy: integer("strategy_legacy", { mode: "boolean" }).notNull().default(false),
     enabled: integer("enabled", { mode: "boolean" }).notNull(),
     payload: text("payload", { mode: "json" }).notNull(),
     createdAt: text("created_at").notNull(),
@@ -13,6 +16,7 @@ export const alerts = sqliteTable(
   },
   (table) => [
     index("alerts_user_idx").on(table.userId),
+    index("alerts_user_strategy_idx").on(table.userId, table.strategy),
     uniqueIndex("alerts_user_id_unique").on(table.userId, table.id),
   ],
 );
@@ -41,6 +45,8 @@ export const journalEntries = sqliteTable(
     userId: text("user_id").notNull(),
     symbol: text("symbol").notNull(),
     strategy: text("strategy").notNull(),
+    strategyVersion: integer("strategy_version").notNull().default(13),
+    strategyLegacy: integer("strategy_legacy", { mode: "boolean" }).notNull().default(false),
     timeframe: text("timeframe").notNull(),
     actualPnl: real("actual_pnl").notNull(),
     rMultiple: real("r_multiple").notNull(),
@@ -51,6 +57,7 @@ export const journalEntries = sqliteTable(
   },
   (table) => [
     index("journal_user_date_idx").on(table.userId, table.tradeDate),
+    index("journal_user_strategy_idx").on(table.userId, table.strategy),
     uniqueIndex("journal_user_id_unique").on(table.userId, table.id),
   ],
 );

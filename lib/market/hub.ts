@@ -3,7 +3,6 @@ import { circuitHealth, fetchValidated } from "./http";
 import { markPayloadStale, mergeProviderPayloads, metric } from "./merge";
 import {
   failedOkxHealth,
-  fullOkxFetchPlan,
   getOkxData,
   okxL1Plan,
   okxL2Plan,
@@ -11,11 +10,14 @@ import {
 } from "./providers/okx";
 import { symbolsForTier } from "./symbols";
 import {
+  DEFAULT_TRADE_COSTS,
+  TIMEFRAMES,
   type FetchTier,
   type MarketHubPayload,
   type OkxFetchPlan,
   type ProviderHealth,
   type ProviderPayload,
+  type TradeCosts,
 } from "./types";
 
 const FRESH_TTL_MS: Record<FetchTier, number> = {
@@ -55,18 +57,26 @@ const inFlight = new Map<string, Promise<MarketHubPayload>>();
 let providerRequestIds = new WeakMap<object, number>();
 let providerRequestSequence = 0;
 
-function cacheKey(tier: FetchTier) {
-  return `okx:${tier}`;
+function normalizedCosts(costs: TradeCosts = DEFAULT_TRADE_COSTS): TradeCosts {
+  return {
+    feeRate: Math.max(0, Math.min(0.02, costs.feeRate)),
+    slippageRate: Math.max(0, Math.min(0.02, costs.slippageRate)),
+  };
 }
 
-function requestKey(tier: FetchTier, providers?: ProviderClients) {
-  if (!providers) return cacheKey(tier);
+function cacheKey(tier: FetchTier, costs: TradeCosts = DEFAULT_TRADE_COSTS) {
+  const safe = normalizedCosts(costs);
+  return `okx:${tier}:fee-${safe.feeRate.toFixed(6)}:slip-${safe.slippageRate.toFixed(6)}`;
+}
+
+function requestKey(tier: FetchTier, providers?: ProviderClients, costs: TradeCosts = DEFAULT_TRADE_COSTS) {
+  if (!providers) return cacheKey(tier, costs);
   let id = providerRequestIds.get(providers);
   if (!id) {
     id = ++providerRequestSequence;
     providerRequestIds.set(providers, id);
   }
-  return `injected:${id}:${cacheKey(tier)}`;
+  return `injected:${id}:${cacheKey(tier, costs)}`;
 }
 
 async function getFearGreed() {
@@ -142,7 +152,7 @@ async function withDeadline<T>(label: string, timeoutMs: number, factory: (signa
 }
 
 function fetchedFields(plan: OkxFetchPlan) {
-  if (plan.full) return ["ticker", "funding", "openInterest", "oiChange", "longShortRatio", "candles:15m/1h/4h/1d"];
+  if (plan.full) return ["ticker", "funding", "openInterest", "oiChange", "longShortRatio", `candles:${TIMEFRAMES.join("/")}`];
   return [
     ...plan.tickerSymbols.map((symbol) => `${symbol}:ticker`),
     ...plan.fundingSymbols.map((symbol) => `${symbol}:funding`),
@@ -157,7 +167,7 @@ function planForTier(tier: FetchTier): OkxFetchPlan {
   const symbols = symbolsForTier(tier);
   if (tier === "l1") return okxL1Plan(symbols);
   if (tier === "l2") return okxL2Plan(symbols);
-  return fullOkxFetchPlan();
+  return okxL3CandlePlan(symbols, [...TIMEFRAMES]);
 }
 
 /**
@@ -166,6 +176,7 @@ function planForTier(tier: FetchTier): OkxFetchPlan {
 export async function buildMarketHub(
   providers: ProviderClients = {},
   tier: FetchTier = "l2",
+  costs: TradeCosts = DEFAULT_TRADE_COSTS,
 ) {
   const startedAt = Date.now();
   const fearPromise = providers.fear ? providers.fear() : getFearGreed();
@@ -186,6 +197,7 @@ export async function buildMarketHub(
     okx: { assets: okxResult.value?.assets ?? [], health: okxHealth },
     fearGreed: fear.value,
     fearHealth: fear.health,
+    costs: normalizedCosts(costs),
     staleTtlMs: STALE_TTL_MS,
     pipeline: {
       stage: "using-okx",
@@ -202,10 +214,11 @@ export async function buildMarketHub(
 export async function getMarketHub(
   providers?: ProviderClients,
   tier: FetchTier = "l2",
+  costs: TradeCosts = DEFAULT_TRADE_COSTS,
 ) {
   const now = Date.now();
-  const key = cacheKey(tier);
-  const activeRequestKey = requestKey(tier, providers);
+  const key = cacheKey(tier, costs);
+  const activeRequestKey = requestKey(tier, providers, costs);
   const freshTtl = FRESH_TTL_MS[tier];
 
   if (!providers) {
@@ -218,7 +231,7 @@ export async function getMarketHub(
   const existing = inFlight.get(activeRequestKey);
   if (existing) return existing;
 
-  const task = buildMarketHub(providers ?? {}, tier)
+  const task = buildMarketHub(providers ?? {}, tier, costs)
     .then((payload) => {
       if (!payload.assets.length) throw new Error("Market Data Hub cannot return success with zero assets");
       if (!providers) {
@@ -251,7 +264,7 @@ export async function getMarketCandles(
     okx: providers?.okx
       ? providers.okx
       : (_plan, signal) => getOkxData(okxL3CandlePlan(list), { signal }),
-  }, "l3");
+  }, "l3", DEFAULT_TRADE_COSTS);
 }
 
 export function __setMarketCacheForTests(
@@ -265,5 +278,5 @@ export function __setMarketCacheForTests(
     providerRequestSequence = 0;
     return;
   }
-  cacheByTier.set(cacheKey(tier), value);
+  cacheByTier.set(cacheKey(tier, DEFAULT_TRADE_COSTS), value);
 }
