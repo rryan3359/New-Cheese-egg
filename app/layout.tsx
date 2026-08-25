@@ -7,7 +7,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? (productionHost ? `https://$
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Cheese&Egg｜Crypto Decision Workbench",
-  description: "整合 Binance 與 OKX 真實永續合約行情、交易所帳戶多空傾向、策略計畫、風險計算與資料健康的交易決策工作台。",
+  description: "整合 OKX 永續合約行情、交易所帳戶多空傾向、七套策略計畫、風險計算與資料健康的交易決策工作台。",
   openGraph: {
     title: "Cheese&Egg｜Crypto Decision Workbench",
     description: "真實行情、衍生品帳戶傾向、策略與風險管理，一個清楚的加密交易決策工作台。",

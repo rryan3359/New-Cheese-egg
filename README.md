@@ -1,102 +1,88 @@
-# Cheese&Egg · Crypto Decision Workbench
+# Cheese&Egg v12
 
-一個以「先判讀市場、再決定是否交易」為核心的加密貨幣永續合約決策工作台。介面延續 Cheese&Egg 的暖橘、酸橙綠與起司／蛋品牌意象，內容則改為深色專業交易終端。
+Cheese&Egg 是以繁體中文呈現的加密交易決策工作台。專案保留七套策略、Trade Plan、風險計算、警報、交易日誌、D1、TradingView 版面與既有 Cheese／Egg 品牌。
 
-## 已實作
+## 資料信任原則
 
-- 市場駕駛艙：市場狀態、BTC／ETH 核心行情、衍生品快照、風險雷達與機會佇列。
-- 機會掃描器：搜尋、週期、策略、方向、狀態、信心、RR、Volume Z 與圖表跳轉。
-- 衍生品：Funding、OI、OI 變化、大戶／全網多空比與 Positioning 分數。
-- 策略工作台：七套策略都在 15m／1h／4h／1d 執行確定性公式，回傳 `eligible`、`waiting`、`invalid` 或 `missing` 與完整交易計畫。
-- 圖表決策：Trade Plan 卡片（進場／停損／TP／條件／教學）+ TradingView Widget（縮放、歷史、畫線）；數字以卡片為準，圖表源與策略源可解耦。
-- 警報：在市場刷新時真正執行，具有 cooldown、資料快照去重、站內／瀏覽器事件紀錄；介面明確說明分頁關閉時不保證 24/7 執行。
-- 風險管理：把來回手續費納入單筆最大損失，提供倉位、保證金、槓桿警告與 1R／2R／3R。
-- 交易日誌：使用實際數量、費用與 Funding 成本計算淨損益、R、勝率、PF、最大連敗、最大回撤與分組統計。
-- 市場行情主源：**OKX**（已移除 Binance，避免 AU／Vercel 地區封鎖）；Fear & Greed：Alternative.me。
-- 市場畫面與警報引擎共用同一份經伺服器驗證的 snapshot，不會為警報再抓第二套行情。
-- TP1／TP2／TP3 風報比使用實際 entry、stop、target 計算；自選清單會影響駕駛艙、掃描器、圖表與警報排序。
-- 每個市場欄位保留 `source`、`state`、`updatedAt`、`latencyMs` 與 `reason`；缺值顯示 `missing`，不以 `0` 假裝有效。
+- Market Data Hub 僅使用 OKX 公開永續合約資料；不需要交易所 API key。
+- 價格、Funding、OI、多空比、K 線或衍生指標缺少時顯示 `N/A`／資料不足，不會補成 0，也不會據此產生方向訊號。
+- 最近成功快照可在短暫故障時以 stale 狀態保留，畫面會標示最後成功時間。
+- `provider=okx` 只為舊網址相容而保留，和一般請求使用相同 OKX 管線與 tier 快取，不是備援測試。
+- TradingView Widget 目前可能顯示 `BINANCE:<symbol>` 圖表；策略數字仍來自 OKX Market Data Hub。兩者不保證完全一致，Entry、Stop、TP 與 RR 一律以 Trade Plan 為準。
 
-## 快速啟動（本機 + Vercel）
+## 環境需求
 
-需求：Node.js **22.x**（見 `.nvmrc`）。
+- Node.js 22.x（見 `.nvmrc` 與 `package.json#engines`）
+- npm
 
-```bash
-npm install
-npm run dev          # http://localhost:3000
-```
-
-建置與測試：
+首次安裝：
 
 ```bash
 npm ci
-npm run build        # Next.js（給 Vercel）
-npm test
-npm run lint
 ```
 
-詳細上架步驟見 **[DEPLOY.md](./DEPLOY.md)**。
+## 主要執行路徑：Next.js／Vercel
 
-若要走原本的 OpenAI Sites / Cloudflare：
+```bash
+npm run dev
+npm run build
+npm run start
+```
+
+本機開發預設為 `http://localhost:3000`。`vercel.json` 以 `npm ci` 安裝並執行 `npm run build`。
+
+## 次要執行路徑：Sites／Vinext
 
 ```bash
 npm run dev:sites
 npm run build:sites
+npm run start:sites
 ```
 
-公開市場資料不需要 API key。若未來接入交易帳戶或 Telegram，請只在伺服器環境變數保存憑證，不要放進瀏覽器或提交至 Git。
+`.openai/hosting.json` 保留既有 Sites `project_id` 與 D1 `DB` binding。不要重新初始化 Sites 專案或替換該 metadata。
 
-## 資料與保存
+## 漸進式行情流程
 
-市場資料由伺服器端 `Market Data Hub` 取得與驗證。警報、事件、交易日誌、自選清單和風險偏好優先保存在 Cloudflare D1，所有讀寫都使用 Sites 注入的使用者 ID 在伺服器端隔離。若身分或 D1 暫不可用，前端會明確降級成版本化 localStorage 並顯示「僅此裝置」，不會假裝已跨裝置同步。Telegram 未設定，因此不會顯示假成功。
+1. L1 先取得優先市場關鍵行情，成功後立即顯示市場駕駛艙。
+2. L2 與 L3 並行補齊衍生品和 K 線／策略資料。
+3. 每個 tier 使用獨立 fresh cache、in-flight request coalescing 與 stale-good-data fallback。
+4. 單一 tier 失敗時保留其他 tier 的成功結果；分頁隱藏時暫停更新，恢復可見後再安全刷新。
+5. 警報使用畫面相同快照判定，但不阻塞第一批行情顯示。
 
-詳細文件：
+行情完全不可用時，市場駕駛艙、掃描器、衍生品、策略與圖表顯示專屬 unavailable 狀態；設定、交易日誌、警報歷史、資料健康與離線風險試算仍可開啟。
 
-- `docs/data-architecture.md`
-- `docs/strategy-formulas.md`
-- `docs/validation-report.md`
+## 使用者資料與 D1
 
-## 重要免責
+- Sites 路徑可透過既有 D1 binding 保存使用者資料。
+- Next.js／Vercel 沒有該 D1 binding 時會誠實降級為裝置端保存，不影響公開行情。
+- D1 schema：`db/schema.ts`
+- D1 migration：`drizzle/0000_user_workbench.sql`
 
-本產品是研究與風險規劃工具，不構成投資建議，也不會自動下單。永續合約可能造成超過預期的快速損失；所有策略都必須搭配停損與個人風險上限。
+## 環境變數
 
-## 部署說明
+複製 `.env.example` 為本機 `.env.local`（如需覆寫）。市場資料只使用：
 
-本專案有 **兩套執行路徑**，不要混用腳本：
+```text
+OKX_BASE_URL=https://www.okx.com
+```
 
-### 1. 主要：OpenAI Sites / Cloudflare（推薦）
+Telegram 設定為選填且只能放在伺服器端。請勿提交 `.env`、token、cookie 或 API key。
 
-身分由 ChatGPT Sites 注入（`oai-authenticated-user-id`），使用者資料走 Cloudflare D1。
+## 正式驗證
+
+使用 Node.js 22.x 依序執行：
 
 ```bash
-npm install
-npm run dev      # vinext
-npm run build    # vinext build
+npm ci
+npx tsc --noEmit
+npm test
+npm run lint
+npm run build
+npm run build:sites
 ```
 
-需要正確的 `.openai/hosting.json` D1 binding，以及 Sites 控制平面注入的環境。
+兩條 build 是不同執行路徑；Sites build 通過不能取代 TypeScript、測試、lint 或 Next.js build。
 
-### 2. 次要：Vercel（僅公開行情 + 本機偏好）
+## 免責聲明
 
-Vercel **沒有** Cloudflare D1 與 Sites 使用者身分，因此：
-
-- 市場行情 API（OKX）可正常運作
-- 警報、日誌、自選清單會降級為 **瀏覽器 localStorage（僅此裝置）**
-- 不會出現「假同步成功」
-
-部署時請使用：
-
-```bash
-npm run build:vercel   # 即 next build --webpack
-npm run start:vercel
-```
-
-`vercel.json` 已指定 `buildCommand: npm run build:vercel`。  
-Node 版本請固定 **22.x**（見 `package.json` engines 與 `.nvmrc`）。
-
-若在 Vercel 看到 `cloudflare:workers` 相關錯誤，確認 `next.config.ts` 的 shim 有被套用（`VERCEL` 環境變數存在時會自動 alias）。
-
-### 不建議
-
-- 在 Vercel 上跑 `npm run build`（那是 vinext／Cloudflare 路徑）
-- 期待 Vercel 上有跨裝置雲端同步（需 Sites + D1）
+本專案僅供研究、紀錄與風險規劃，不構成投資建議，也不會要求交易權限。

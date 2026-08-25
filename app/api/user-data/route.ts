@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   if (!userId) return deviceOnlyPayload();
   try {
     return NextResponse.json(await loadUserData(userId));
-  } catch (error) {
+  } catch {
     // D1 不可用（例如 Vercel）：降級，不要用 503 嚇前端
     return deviceOnlyPayload();
   }
@@ -81,4 +81,3 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "D1 暫時無法刪除" }, { status: 503 });
   }
 }
-

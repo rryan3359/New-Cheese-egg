@@ -1,76 +1,88 @@
-# Cheese&Egg · 本機開發 → Git → Vercel
+# Cheese&Egg v12 執行與部署文件
 
-這份專案已調成 **以 Next.js + Vercel 為主**。  
-（原本的 OpenAI Sites / vinext 仍可用：`npm run dev:sites` / `npm run build:sites`）
+本專案以 Next.js／Vercel 為主要路徑，Sites／Vinext 為保留 D1 能力的次要路徑。兩者共用同一份應用程式碼，但 build 指令與執行環境不同。
 
-## 你會得到什麼
+## 共同要求
 
-| 功能 | Vercel 上 |
-|------|-----------|
-| 市場行情（Binance / OKX） | ✅ 正常 |
-| 策略、圖表、掃描器、風險、日誌 UI | ✅ 正常 |
-| 警報、自選、設定、日誌儲存 | ✅ 存在**瀏覽器本機**（僅此裝置） |
-| 跨裝置雲端同步（D1） | ❌ 需要 OpenAI Sites |
+- Node.js 22.x
+- 使用已提交的 `package-lock.json`
+- 安裝指令為 `npm ci`
+- Market Data Hub 僅使用 OKX 公開端點
+- 伺服器秘密只放在平台環境變數，不提交 `.env`
 
-## 一、在自己電腦跑起來
-
-需求：Node.js **22.x**（見 `.nvmrc`）
+正式檢查：
 
 ```bash
-# 1. 解壓後進入資料夾
-cd cheese-egg-desk   # 或你的資料夾名
+npm ci
+npx tsc --noEmit
+npm test
+npm run lint
+npm run build
+npm run build:sites
+```
 
-# 2. 安裝
-npm install
+任何一項失敗都要如實記錄；不能用其中一條 build 的成功取代其他檢查。
 
-# 3. 本機開發
+## 主要路徑：Next.js／Vercel
+
+本機：
+
+```bash
 npm run dev
-# 開 http://localhost:3000
 ```
 
-## 二、丟上 GitHub
+正式 build 與啟動：
 
 ```bash
-git init
-git add .
-git commit -m "Cheese&Egg workbench ready for Vercel"
-# 在 GitHub 新建空 repo 後：
-git branch -M main
-git remote add origin https://github.com/你的帳號/你的repo.git
-git push -u origin main
+npm run build
+npm run start
 ```
 
-（若 repo 已存在，把檔案覆蓋進去再 `git add -A && git commit && git push` 即可。）
+`vercel.json` 已設定：
 
-## 三、接 Vercel
+- framework：Next.js
+- install command：`npm ci`
+- build command：`npm run build`
 
-1. 開 [vercel.com](https://vercel.com) → Import 該 GitHub repo  
-2. Framework 選 **Next.js**（或讓它自動偵測）  
-3. Build Command 應為 `npm run build`（`vercel.json` 已寫好）  
-4. Node.js Version 選 **22.x**  
-5. Deploy  
+Vercel 專案請選 Node.js 22.x。若沒有 Sites 的 D1 binding，設定、警報與日誌會明確降級為此裝置保存；公開 OKX 行情不受影響。
 
-不需要填 API Key（公開行情）。  
-環境變數可不設；有 `NEXT_PUBLIC_SITE_URL` 可選填正式網址。
+可選環境變數：
 
-## 四、部署後預期畫面
+```text
+OKX_BASE_URL=https://www.okx.com
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+```
 
-- 行情、策略、圖表可看  
-- 上方或橫幅可能顯示「保存在這台裝置」→ 正常  
-- 重新整理後自選／警報仍在（同一瀏覽器）
+Telegram 兩個值都未設定時，通知維持「尚未設定」。
 
-## 常見錯誤
+## 次要路徑：Sites／Vinext
 
-| 狀況 | 處理 |
-|------|------|
-| Build 用了 vinext / Cloudflare 錯 | 確認跑的是 `npm run build`，不是 `build:sites` |
-| `cloudflare:workers` 找不到 | `next.config.ts` 已 shim，拉最新程式再 deploy |
-| Node 版本警告 | Project Settings → Node.js → 22.x |
-| 想要跨裝置同步 | 需回到 OpenAI Sites + D1，不是純 Vercel |
+本機：
 
-## 給其他 AI 的提示（可直接貼）
+```bash
+npm run dev:sites
+```
 
-> 這是 Next.js 16 + React 19 的加密貨幣工作台。  
-> 本機用 `npm run dev`，上線用 `npm run build` + Vercel。  
-> 不要改成跑 vinext，除非我明確說要 OpenAI Sites。  
-> 使用者資料在 Vercel 上走 localStorage 降級，行情走 `/api/crypto`。
+正式 build 與啟動：
+
+```bash
+npm run build:sites
+npm run start:sites
+```
+
+必須保留 `.openai/hosting.json` 既有的 `project_id` 與 D1 `DB` binding。不得為了本機驗證建立新 Sites 專案。D1 schema 與 migration 位於：
+
+- `db/schema.ts`
+- `drizzle/0000_user_workbench.sql`
+
+## 發布前人工檢查
+
+- `/api/crypto?tier=l1` 回傳 OKX live 或明確 stale 狀態，且不洩漏內部錯誤。
+- 桌面、390×844、430×932；淺色與深色主題。
+- 市場頁、掃描器、衍生品、策略、圖表、警報、風險、日誌、資料健康與設定。
+- 行情失敗時，設定、日誌、警報歷史、資料健康與風險試算仍可操作。
+- 手機更多選單支援 Escape、focus trap、焦點返回、背景點擊關閉與背景捲動鎖定。
+- 頁面沒有水平溢位，瀏覽器沒有 React、Next、hydration 或 console error。
+
+本文件描述部署方式，不代表某次交付已實際部署。每次交付都應另附當次真實驗證結果與 URL（若有部署）。

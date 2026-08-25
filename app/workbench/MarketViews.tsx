@@ -25,24 +25,24 @@ const strategyLabels: Record<StrategyName, string> = {
   "ICT Liquidity Sweep": "流動性掃單",
   "Range Mean Reversion": "區間均值回歸",
 };
-const stateLabels: Record<string, string> = { live: "即時", fallback: "備援", stale: "稍早資料", missing: "資料不足", eligible: "可規劃", waiting: "等待", invalid: "不合", triggered: "已觸發", cooldown: "暫停提醒", disabled: "已關閉" };
+const stateLabels: Record<string, string> = { live: "即時", stale: "稍早資料", missing: "資料不足", eligible: "可規劃", waiting: "等待", invalid: "不合", triggered: "已觸發", cooldown: "暫停提醒", disabled: "已關閉" };
 const directionLabels: Record<string, string> = { Long: "偏多", Short: "偏空", Neutral: "中性" };
 const regimeLabels: Record<string, string> = { "Risk-Off": "風險偏高", Range: "區間整理", Trend: "趨勢行情" };
 export function formatPrice(value: number | null, digits = 2) {
-  if (value === null || !Number.isFinite(value)) return "—";
+  if (value === null || !Number.isFinite(value)) return "N/A";
   return `$${new Intl.NumberFormat("en-US", { maximumFractionDigits: value < 10 ? 4 : digits, minimumFractionDigits: value < 10 ? 4 : digits }).format(value)}`;
 }
 export function formatPercent(value: number | null, digits = 2) {
-  if (value === null) return "—";
+  if (value === null) return "N/A";
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 export function compact(value: number | null) {
-  if (value === null) return "—";
+  if (value === null) return "N/A";
   return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(value);
 }
 function tone(value: number | null) { return value === null ? "missing" : value >= 0 ? "positive" : "negative"; }
 function StatePill({ state }: { state: string }) { return <span className={`metric-state ${state}`}>{stateLabels[state] ?? state}</span>; }
-function rr(value: number | null) { return value === null ? "—" : `${value.toFixed(2)}R`; }
+function rr(value: number | null) { return value === null ? "N/A" : `${value.toFixed(2)}R`; }
 
 function SetupCompact({ setup, onOpen }: { setup: StrategyResult; onOpen: () => void }) {
   return <button className="setup-compact" type="button" onClick={onOpen}>
@@ -60,7 +60,7 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart }: { data
   return <div className="view-stack">
     <section className="cockpit-heading view-heading"><div><p>MARKET COCKPIT</p><h1>先讀懂市場，<br /><i>再決定是否交易。</i></h1></div><button type="button" onClick={() => onNavigate("scanner")}>掃描交易機會 <span>↗</span></button></section>
     <section className="regime-grid live-regime">
-      <article className="regime-card"><div className="terminal-label"><span>市場節奏</span><StatePill state="live" /></div><strong>{regimeLabels[data.regime] ?? data.regime}</strong><div className="regime-metrics"><span>上漲比例<b>{data.breadth.total ? Math.round(data.breadth.advancing / data.breadth.total * 100) : 0}%</b></span><span>市場情緒<b>{data.fearGreed.value?.value ?? "—"}</b></span><span>資料年齡<b>{Math.round(data.cacheAgeMs / 1000)} 秒</b></span></div><div className="regime-scale"><i style={{ left: data.regime === "Risk-Off" ? "15%" : data.regime === "Range" ? "50%" : "83%" }} /><span>風險偏高</span><span>區間</span><span>趨勢</span></div></article>
+      <article className="regime-card"><div className="terminal-label"><span>市場節奏</span><StatePill state={data.pipeline.stage === "showing-stale" ? "stale" : "live"} /></div><strong>{regimeLabels[data.regime] ?? data.regime}</strong><div className="regime-metrics"><span>上漲比例<b>{data.breadth.total ? `${Math.round(data.breadth.advancing / data.breadth.total * 100)}%` : "N/A"}</b></span><span>市場情緒<b>{data.fearGreed.value?.value ?? "N/A"}</b></span><span>最後更新<b>{new Date(data.updatedAt).toLocaleTimeString("zh-TW")}</b></span></div><div className="regime-scale"><i style={{ left: data.regime === "Risk-Off" ? "15%" : data.regime === "Range" ? "50%" : "83%", display: data.regime === "N/A" ? "none" : undefined }} /><span>風險偏高</span><span>區間</span><span>趨勢</span></div></article>
       {core.map((asset) => <button className="core-asset" key={asset.symbol} type="button" onClick={() => onOpenChart(asset.symbol, "1h")}><div><span className={`coin-mark ${asset.symbol.startsWith("BTC") ? "btc" : "eth"}`}>{asset.symbol[0]}</span><p><b>{asset.symbol.replace("USDT", " / USDT")}</b><small>{asset.name}</small></p><StatePill state={asset.price.state} /></div><strong>{formatPrice(asset.price.value)}</strong><p className={tone(asset.change24h.value)}>{formatPercent(asset.change24h.value)} · 24h</p><div className="timeframe-row"><span>15m <b className={tone(asset.change15m.value)}>{formatPercent(asset.change15m.value)}</b></span><span>1h <b className={tone(asset.change1h.value)}>{formatPercent(asset.change1h.value)}</b></span><span>4h <b className={tone(asset.change4h.value)}>{formatPercent(asset.change4h.value)}</b></span><span>1d <b className={tone(asset.change24h.value)}>{formatPercent(asset.change24h.value)}</b></span></div></button>)}
     </section>
     <section className="cockpit-split"><article className="terminal-panel"><div className="panel-heading"><div><p>DERIVATIVES SNAPSHOT</p><h2>市場是否太擁擠</h2></div><button type="button" onClick={() => onNavigate("derivatives")}>完整分析 →</button></div><div className="derivative-mini-grid">{core.map((asset) => <div key={asset.symbol}><span>{asset.symbol.replace("USDT", "")}</span><p>資金費率 <b>{asset.funding.value === null ? "—" : `${(asset.funding.value * 100).toFixed(4)}%`}</b></p><p>未平倉量 <b>{compact(asset.openInterest.value)}</b></p><p>多空傾向 <b>{asset.positioning.value?.toFixed(1) ?? "—"}</b></p></div>)}</div></article><article className="terminal-panel risk-panel"><div className="panel-heading"><div><p>RISK RADAR</p><h2>目前要小心</h2></div><span className="alert-count">{data.riskAlerts.length}</span></div>{data.riskAlerts.length ? <ul className="risk-list">{data.riskAlerts.map((alert) => <li key={alert}><span>!</span>{alert}</li>)}</ul> : <div className="quiet-state"><span>✓</span><p>暫無異常風險訊號<br /><small>仍需遵守單筆風險上限</small></p></div>}</article></section>
@@ -87,7 +87,7 @@ export function ScannerView({ data, watchlist, onOpenChart }: { data: MarketHubP
   return <div className="view-stack"><ViewTitle eyebrow="OPPORTUNITY SCANNER" title="從條件開始，不從方向開始。" copy="同時檢查七套策略與四個週期；資料不足時只會顯示不足，不會硬湊成買賣方向。" />
     <section className="filter-bar"><label>搜尋<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="BTC, ETH, SOL…" /></label><label>週期<select value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe | "All")}><option value="All">全部</option>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select></label><label>策略<select value={strategy} onChange={(event) => setStrategy(event.target.value as StrategyName | "All")}><option value="All">全部</option>{strategies.map((item) => <option key={item} value={item}>{strategyLabels[item]}</option>)}</select></label><label>方向<select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="All">全部</option><option value="Long">偏多</option><option value="Short">偏空</option><option value="Neutral">中性</option></select></label><label>狀態<select value={status} onChange={(event) => setStatus(event.target.value as StrategyStatus | "All")}><option value="All">全部</option><option value="eligible">條件完成</option><option value="waiting">等待中</option><option value="invalid">不成立</option><option value="missing">資料不足</option></select></label><label>最低信心<input type="number" min="0" max="100" value={minimumConfidence} onChange={(event) => setMinimumConfidence(Number(event.target.value))} /></label><label>最低報酬風險比<input type="number" step="0.25" value={minimumRr} onChange={(event) => setMinimumRr(Number(event.target.value))} /></label><label>量能門檻（Z）<input type="number" step="0.25" value={minimumVolumeZ} onChange={(event) => setMinimumVolumeZ(Number(event.target.value))} /></label><button className={onlyWatchlist ? "watchlist-filter active" : "watchlist-filter"} type="button" aria-pressed={onlyWatchlist} onClick={() => setOnlyWatchlist((current) => !current)}>★ 只看自選</button><span>{rows.length} 個結果</span></section>
     {onlyWatchlist && watchlist.length === 0 && <div className="watchlist-empty">自選清單是空的。請先到「設定」加入幣種，這裡不會自動把全部市場當成自選。</div>}
-    <section className="scanner-table"><div className="scanner-row scanner-head"><span>幣種／週期</span><span>價格／24 小時</span><span>市場狀態</span><span>未平倉量 1H</span><span>資金費率</span><span>策略</span><span>條件狀態</span><span>進場／停損</span><span>報酬風險比</span><span>信心</span></div>{rows.map(({ asset, setup }) => <button className="scanner-row" key={setup.id} type="button" onClick={() => onOpenChart(asset.symbol, setup.timeframe, setup.strategy)}><span className="symbol-cell"><b>{asset.symbol.replace("USDT", "")} · {setup.timeframe}</b></span><span><b>{formatPrice(asset.price.value)}</b><small className={tone(asset.change24h.value)}>{formatPercent(asset.change24h.value)}</small></span><span>{asset.timeframes[setup.timeframe].trend.value ?? "—"}</span><span className={tone(asset.oiChange1h.value)}>{formatPercent(asset.oiChange1h.value)}</span><span>{asset.funding.value === null ? "—" : `${(asset.funding.value * 100).toFixed(4)}%`}</span><span>{strategyLabels[setup.strategy]}</span><span><StatePill state={setup.status} /><small>{setup.conditionsMet}/{setup.conditionsTotal} 個條件</small></span><span><b>{formatPrice(setup.entryLow)}</b><small>停損 {formatPrice(setup.stop)}</small></span><span><b>{rr(setup.primaryRiskReward)}</b><small>{setup.primaryTarget ?? "—"}</small></span><span className="confidence-cell"><b>{setup.confidence}%</b><i style={{ width: `${setup.confidence}%` }} /></span></button>)}</section>
+    <section className="scanner-table"><div className="scanner-row scanner-head"><span>幣種／週期</span><span>價格／24 小時</span><span>市場狀態</span><span>未平倉量 1H</span><span>資金費率</span><span>策略</span><span>條件狀態</span><span>進場／停損</span><span>報酬風險比</span><span>信心</span></div>{rows.map(({ asset, setup }) => <button className="scanner-row" key={setup.id} type="button" onClick={() => onOpenChart(asset.symbol, setup.timeframe, setup.strategy)}><span data-label="幣種／週期" className="symbol-cell"><b>{asset.symbol.replace("USDT", "")} · {setup.timeframe}</b><small>{new Date(setup.updatedAt).toLocaleTimeString("zh-TW")} · {stateLabels[asset.price.state]}</small></span><span data-label="價格／24h"><b>{formatPrice(asset.price.value)}</b><small className={tone(asset.change24h.value)}>{formatPercent(asset.change24h.value)}</small></span><span data-label="市場狀態">{asset.timeframes[setup.timeframe].trend.value ?? "N/A"}</span><span data-label="OI 1h" className={tone(asset.oiChange1h.value)}>{formatPercent(asset.oiChange1h.value)}</span><span data-label="Funding">{asset.funding.value === null ? "N/A" : `${(asset.funding.value * 100).toFixed(4)}%`}</span><span data-label="策略／方向">{strategyLabels[setup.strategy]}<small>{directionLabels[setup.direction]}</small></span><span data-label="條件狀態"><StatePill state={setup.status} /><small>{setup.conditionsMet}/{setup.conditionsTotal} 個條件</small></span><span data-label="Entry／Stop"><b>{formatPrice(setup.entryLow)}</b><small>停損 {formatPrice(setup.stop)}</small></span><span data-label="RR"><b>{rr(setup.primaryRiskReward)}</b><small>{setup.primaryTarget ?? "N/A"}</small></span><span data-label="信心" className="confidence-cell"><b>{setup.confidence}%</b><i style={{ width: `${setup.confidence}%` }} /></span></button>)}</section>
   </div>;
 }
 
@@ -125,13 +125,13 @@ export function DerivativesView({ data }: { data: MarketHubPayload }) {
         </div>
         {data.assets.map((asset) => (
           <div className="position-row" key={asset.symbol}>
-            <b>{asset.symbol.replace("USDT", "")}</b>
-            <span title={asset.funding.reason ?? undefined}>{asset.funding.value === null ? "—" : `${(asset.funding.value * 100).toFixed(4)}%`}</span>
-            <span title={asset.openInterest.reason ?? undefined}>{compact(asset.openInterest.value)}</span>
-            <span className={tone(asset.oiChange1h.value)} title={asset.oiChange1h.reason ?? undefined}>{formatPercent(asset.oiChange1h.value)}</span>
-            <span title={asset.globalRatio.reason ?? undefined}>{asset.globalRatio.value?.toFixed(2) ?? "—"}</span>
-            <span title={asset.topRatio.reason ?? undefined}>{asset.topRatio.value?.toFixed(2) ?? "—"}</span>
-            <span className={tone(asset.positioning.value)} title={asset.positioning.reason ?? undefined}>{asset.positioning.value?.toFixed(1) ?? "—"}</span>
+            <b data-label="幣種">{asset.symbol.replace("USDT", "")}</b>
+            <span data-label="Funding" title={asset.funding.reason ?? undefined}>{asset.funding.value === null ? "N/A" : `${(asset.funding.value * 100).toFixed(4)}%`}</span>
+            <span data-label="未平倉量" title={asset.openInterest.reason ?? undefined}>{compact(asset.openInterest.value)}</span>
+            <span data-label="OI 1h" className={tone(asset.oiChange1h.value)} title={asset.oiChange1h.reason ?? undefined}>{formatPercent(asset.oiChange1h.value)}</span>
+            <span data-label="全體多空比" title={asset.globalRatio.reason ?? undefined}>{asset.globalRatio.value?.toFixed(2) ?? "N/A"}</span>
+            <span data-label="大戶多空比" title={asset.topRatio.reason ?? undefined}>{asset.topRatio.value?.toFixed(2) ?? "N/A"}</span>
+            <span data-label="傾向分數" className={tone(asset.positioning.value)} title={asset.positioning.reason ?? undefined}>{asset.positioning.value?.toFixed(1) ?? "N/A"}</span>
           </div>
         ))}
       </section>
@@ -319,5 +319,4 @@ export function ChartView({
 }
 
 export function ViewTitle({ eyebrow, title, copy }: { eyebrow: string; title: string; copy: string }) { return <section className="view-title"><p>{eyebrow}</p><h1>{title}</h1><span>{copy}</span></section>; }
-export function EmptyState({ title, copy }: { title: string; copy: string }) { return <div className="empty-state"><span>—</span><h2>{title}</h2><p>{copy}</p></div>; }
-
+export function EmptyState({ title, copy, actionLabel, onAction }: { title: string; copy: string; actionLabel?: string; onAction?: () => void }) { return <div className="empty-state"><span>—</span><h2>{title}</h2><p>{copy}</p>{actionLabel && onAction && <button className="secondary-terminal-button" type="button" onClick={onAction}>{actionLabel}</button>}</div>; }

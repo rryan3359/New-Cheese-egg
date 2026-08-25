@@ -14,7 +14,7 @@ import {
 } from "../types";
 
 const SYMBOLS = [...CORE_SYMBOLS];
-const API = "https://www.okx.com";
+const API = (process.env.OKX_BASE_URL || "https://www.okx.com").replace(/\/+$/, "");
 const envelope = <T extends z.ZodTypeAny>(data: T) =>
   z.object({ code: z.string(), data: z.array(data) }).passthrough();
 const tickerSchema = envelope(
@@ -354,7 +354,7 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
   const errors = assets.flatMap((asset) => asset.errors).slice(0, 12);
   const health: ProviderHealth = {
     name: "OKX",
-    state: errors.length ? "fallback" : "live",
+    state: assets.some((asset) => asset.price !== null || TIMEFRAMES.some((timeframe) => asset.candlesByTimeframe[timeframe].length)) ? "live" : "missing",
     latencyMs: Date.now() - startedAt,
     lastSuccessAt: state.lastSuccessAt,
     lastFailureAt: state.lastFailureAt,

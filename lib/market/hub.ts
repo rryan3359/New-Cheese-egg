@@ -52,7 +52,22 @@ type ProviderClients = {
 type CacheEntry = { payload: MarketHubPayload; storedAt: number };
 const cacheByTier = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<MarketHubPayload>>();
-let lastOkxHealth: ProviderHealth | null = null;
+let providerRequestIds = new WeakMap<object, number>();
+let providerRequestSequence = 0;
+
+function cacheKey(tier: FetchTier) {
+  return `okx:${tier}`;
+}
+
+function requestKey(tier: FetchTier, providers?: ProviderClients) {
+  if (!providers) return cacheKey(tier);
+  let id = providerRequestIds.get(providers);
+  if (!id) {
+    id = ++providerRequestSequence;
+    providerRequestIds.set(providers, id);
+  }
+  return `injected:${id}:${cacheKey(tier)}`;
+}
 
 async function getFearGreed() {
   const startedAt = Date.now();
@@ -126,11 +141,6 @@ async function withDeadline<T>(label: string, timeoutMs: number, factory: (signa
   }
 }
 
-function unique(values: string[]) {
-  return Array.from(new Set(values));
-}
-
-
 function fetchedFields(plan: OkxFetchPlan) {
   if (plan.full) return ["ticker", "funding", "openInterest", "oiChange", "longShortRatio", "candles:15m/1h/4h/1d"];
   return [
@@ -152,10 +162,8 @@ function planForTier(tier: FetchTier): OkxFetchPlan {
 
 /**
  * Market Data Hub — OKX only (Binance removed for AU / Vercel reliability).
- * forceOkx is kept as a no-op alias for API compatibility (always OKX).
  */
 export async function buildMarketHub(
-  _forceOkx = false,
   providers: ProviderClients = {},
   tier: FetchTier = "l2",
 ) {
@@ -172,11 +180,9 @@ export async function buildMarketHub(
   ]);
 
   const okxHealth = okxResult.value?.health ?? failedOkxHealth(okxResult.error);
-  if (okxResult.value) lastOkxHealth = okxResult.value.health;
   const duration = Date.now() - startedAt;
 
   return mergeProviderPayloads({
-    binance: null,
     okx: { assets: okxResult.value?.assets ?? [], health: okxHealth },
     fearGreed: fear.value,
     fearHealth: fear.health,
@@ -194,60 +200,43 @@ export async function buildMarketHub(
 }
 
 export async function getMarketHub(
-  forceOkx = false,
   providers?: ProviderClients,
   tier: FetchTier = "l2",
 ) {
   const now = Date.now();
-  const key = cacheKey(forceOkx, tier);
+  const key = cacheKey(tier);
+  const activeRequestKey = requestKey(tier, providers);
   const freshTtl = FRESH_TTL_MS[tier];
 
-  if (!providers && !forceOkx) {
+  if (!providers) {
     const hit = cacheByTier.get(key);
     if (hit && now - hit.storedAt < freshTtl) {
       return { ...hit.payload, cacheAgeMs: now - hit.storedAt };
     }
   }
 
-  const existing = inFlight.get(key);
+  const existing = inFlight.get(activeRequestKey);
   if (existing) return existing;
 
-  const task = buildMarketHub(forceOkx, providers ?? {}, tier)
+  const task = buildMarketHub(providers ?? {}, tier)
     .then((payload) => {
       if (!payload.assets.length) throw new Error("Market Data Hub cannot return success with zero assets");
-      if (!providers && !forceOkx) {
+      if (!providers) {
         cacheByTier.set(key, { payload, storedAt: Date.now() });
-        // Promote L2 into a warmer L1 cache if L2 covers priority symbols (optional speed-up)
-        if (tier === "l2") {
-          const l1Key = cacheKey(false, "l1");
-          if (!cacheByTier.has(l1Key)) {
-            cacheByTier.set(l1Key, { payload, storedAt: Date.now() });
-          }
-        }
       }
       return payload;
     })
     .catch((error) => {
-      const hit = !forceOkx ? cacheByTier.get(key) : undefined;
+      const hit = cacheByTier.get(key);
       const stale = hit ? markPayloadStale(hit.payload, hit.storedAt, Date.now(), STALE_TTL_MS) : null;
       if (stale) return stale;
-      // Fall back to any tier cache if current tier empty
-      if (!forceOkx) {
-        for (const t of ["l2", "l1", "l3"] as FetchTier[]) {
-          const alt = cacheByTier.get(cacheKey(false, t));
-          if (alt) {
-            const s = markPayloadStale(alt.payload, alt.storedAt, Date.now(), STALE_TTL_MS);
-            if (s) return s;
-          }
-        }
-      }
       throw error;
     })
     .finally(() => {
-      inFlight.delete(key);
+      inFlight.delete(activeRequestKey);
     });
 
-  inFlight.set(key, task);
+  inFlight.set(activeRequestKey, task);
   return task;
 }
 
@@ -257,20 +246,24 @@ export async function getMarketCandles(
   providers?: ProviderClients,
 ): Promise<MarketHubPayload> {
   const list = symbols.length ? symbols : symbolsForTier("l1");
-  return getMarketHub(false, {
+  return getMarketHub({
     ...providers,
     okx: providers?.okx
       ? providers.okx
-      : (plan, signal) => getOkxData(plan.full ? plan : okxL3CandlePlan(list), { signal }),
+      : (_plan, signal) => getOkxData(okxL3CandlePlan(list), { signal }),
   }, "l3");
 }
 
-export function __setMarketCacheForTests(value: { payload: MarketHubPayload; storedAt: number } | null) {
-  cacheByTier.clear();
-  inFlight.clear();
-  lastOkxHealth = null;
-  if (value) {
-    cacheByTier.set(cacheKey(false, "l2"), value);
-    cacheByTier.set(cacheKey(false, "l1"), value);
+export function __setMarketCacheForTests(
+  value: { payload: MarketHubPayload; storedAt: number } | null,
+  tier: FetchTier = "l2",
+) {
+  if (!value) {
+    cacheByTier.clear();
+    inFlight.clear();
+    providerRequestIds = new WeakMap<object, number>();
+    providerRequestSequence = 0;
+    return;
   }
+  cacheByTier.set(cacheKey(tier), value);
 }

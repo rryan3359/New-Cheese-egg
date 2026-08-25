@@ -58,7 +58,7 @@ export async function fetchValidated<T extends z.ZodTypeAny>(provider: string, u
       return { data, latencyMs: Date.now() - startedAt };
     } catch (error) {
       lastError = error;
-      // Hard fail statuses: no retry — let OKX fallback take over immediately
+      // Hard fail statuses: no retry; the hub will use an honest stale snapshot if available.
       const msg = error instanceof Error ? error.message : String(error);
       if (/HTTP (403|451|418|401)/.test(msg)) break;
       if (attempt === 0) {
@@ -102,4 +102,3 @@ export async function mapWithConcurrency<T, R>(items: readonly T[], limit: numbe
   await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
   return results;
 }
-

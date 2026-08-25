@@ -39,10 +39,10 @@ function rawAsset(overrides: Partial<RawAsset> = {}): RawAsset {
   return { symbol: "BTCUSDT", base: "BTC", price: 104, change24h: 2, quoteVolume: 2_000_000, quoteVolumeUnit: "USDT", quoteVolumeMethod: "test quote volume", funding: .0001, openInterest: 1_000_000, oiChange1h: 1, topRatios: [1, 1.02, .99, 1.03, 1.01, 1], globalRatios: [1, 1, 1, 1, 1, 1], candlesByTimeframe, latencyMs: 10, errors: [], ...overrides };
 }
 
-function provider(name: "OKX" | "Binance", asset: RawAsset): ProviderPayload { return { assets: [asset], health: health(name === "Binance" ? "OKX" : name) }; }
+function provider(name: "OKX", asset: RawAsset): ProviderPayload { return { assets: [asset], health: health(name) }; }
 function fear() { return Promise.resolve({ value: metric({ value: 50, label: "Neutral" }, "Alternative.me", "live", 1, null, now), health: health("Alternative.me") }); }
-function market(binance: ProviderPayload | null = null, okx: ProviderPayload | null = provider("OKX", rawAsset())) {
-  return mergeProviderPayloads({ binance, okx, fearGreed: metric({ value: 50, label: "Neutral" }, "Alternative.me", "live", 10, null, now), fearHealth: health("Alternative.me"), now });
+function market(okx: ProviderPayload | null = provider("OKX", rawAsset())) {
+  return mergeProviderPayloads({ okx, fearGreed: metric({ value: 50, label: "Neutral" }, "Alternative.me", "live", 10, null, now), fearHealth: health("Alternative.me"), now });
 }
 
 test("all seven strategies declare missing when candle history is insufficient", () => {
@@ -66,7 +66,7 @@ test("provider work queue never exceeds its configured concurrency", async () =>
 });
 
 test("OKX-only hub returns live OKX metrics", async () => {
-  const payload = await buildMarketHub(false, {
+  const payload = await buildMarketHub({
     okx: async () => provider("OKX", rawAsset({ price: 99 })),
     fear,
   });
@@ -76,24 +76,64 @@ test("OKX-only hub returns live OKX metrics", async () => {
   assert.equal(payload.pipeline.binanceDurationMs, null);
 });
 
+test("fresh caches isolate l1, l2 and l3 without cross-tier promotion", async () => {
+  __setMarketCacheForTests(null);
+  for (const [tier, price] of [["l1", 11], ["l2", 22], ["l3", 33]] as const) {
+    const payload = market(provider("OKX", rawAsset({ price })));
+    __setMarketCacheForTests({ payload: { ...payload, pipeline: { ...payload.pipeline, tier } }, storedAt: Date.now() }, tier);
+  }
+  const [l1, l2, l3] = await Promise.all([
+    getMarketHub(undefined, "l1"),
+    getMarketHub(undefined, "l2"),
+    getMarketHub(undefined, "l3"),
+  ]);
+  assert.deepEqual([l1.assets[0].price.value, l2.assets[0].price.value, l3.assets[0].price.value], [11, 22, 33]);
+  assert.deepEqual([l1.pipeline.tier, l2.pipeline.tier, l3.pipeline.tier], ["l1", "l2", "l3"]);
+  __setMarketCacheForTests(null);
+});
+
+test("concurrent requests for the same tier coalesce into one OKX call", async () => {
+  __setMarketCacheForTests(null);
+  let calls = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const clients = {
+    okx: async () => {
+      calls += 1;
+      await gate;
+      return provider("OKX", rawAsset({ price: 88 }));
+    },
+    fear,
+  };
+  const first = getMarketHub(clients, "l1");
+  const second = getMarketHub(clients, "l1");
+  release();
+  const results = await Promise.all([first, second]);
+  assert.equal(calls, 1);
+  assert.equal(results[0].assets[0].price.value, 88);
+  assert.deepEqual(results[0], results[1]);
+});
+
 test("hung OKX is hard bounded, returns stale data, and clears in-flight state", async () => {
-  const saved = market(null, provider("OKX", rawAsset({ price: 50 })));
+  const saved = market(provider("OKX", rawAsset({ price: 50 })));
+  __setMarketCacheForTests(null);
   __setMarketCacheForTests({ payload: saved, storedAt: Date.now() - 31_000 });
-  const startedAt = Date.now();
-  const stale = await getMarketHub(false, {
-    okx: async () => new Promise<ProviderPayload>(() => undefined),
+  let recover = false;
+  const clients = {
+    okx: async () => recover ? provider("OKX", rawAsset({ price: 123 })) : new Promise<ProviderPayload>(() => undefined),
     fear,
     okxTimeoutMs: 15,
-  });
+  };
+  const startedAt = Date.now();
+  const stale = await getMarketHub(clients);
   assert.equal(stale.pipeline.stage, "showing-stale");
   assert.ok(Date.now() - startedAt < 1_200, `deadline did not stop request: ${Date.now() - startedAt}ms`);
 
-  const recovered = await getMarketHub(false, {
-    okx: async () => provider("OKX", rawAsset({ price: 123 })),
-    fear,
-  });
+  recover = true;
+  const recovered = await getMarketHub(clients);
   assert.equal(recovered.pipeline.stage, "using-okx");
   assert.equal(recovered.assets[0].price.value, 123);
+  __setMarketCacheForTests(null);
 });
 
 test("all seven strategies produce deterministic non-missing decisions with complete inputs", () => {
@@ -137,27 +177,28 @@ test("ICT liquidity sweep distinguishes waiting from missing data", () => {
   assert.ok(result.missingConditions.some((condition) => condition.includes("FVG")));
 });
 
-test("field merge uses OKX fallback and preserves unavailable positioning as missing", () => {
-  const primary = rawAsset({ funding: null, topRatios: [], globalRatios: [] });
-  const fallback = rawAsset({ funding: .0002, topRatios: [], globalRatios: [] });
-  const payload = market(provider("Binance", primary), provider("OKX", fallback));
-  assert.equal(payload.assets[0].funding.source, "OKX");
-  assert.equal(payload.assets[0].funding.state, "fallback");
+test("OKX missing derivatives stay missing without zero or directional inference", () => {
+  const payload = market(provider("OKX", rawAsset({ funding: null, oiChange1h: null, topRatios: [], globalRatios: [] })));
+  assert.equal(payload.assets[0].funding.value, null);
+  assert.equal(payload.assets[0].funding.state, "missing");
   assert.equal(payload.assets[0].positioning.value, null);
   assert.equal(payload.assets[0].positioning.state, "missing");
+  assert.equal(payload.assets[0].globalRatio.value, null);
+  const divergence = payload.assets[0].strategies.find((strategy) => strategy.strategy === "Positioning Divergence");
+  assert.equal(divergence?.status, "missing");
+  assert.equal(divergence?.direction, "Neutral");
 });
 
 test("OKX global ratios alone can produce simplified positioning score", () => {
-  const primary = rawAsset({ topRatios: [], globalRatios: [] });
-  const fallback = rawAsset({ topRatios: [], globalRatios: [0.8, 0.85, 0.9, 0.95, 1.0, 1.2] });
-  const payload = market(provider("Binance", primary), provider("OKX", fallback));
+  const payload = market(provider("OKX", rawAsset({ topRatios: [], globalRatios: [0.8, 0.85, 0.9, 0.95, 1.0, 1.2] })));
   assert.notEqual(payload.assets[0].positioning.value, null);
-  assert.equal(payload.assets[0].positioning.state, "fallback");
+  assert.equal(payload.assets[0].positioning.state, "live");
   assert.equal(payload.assets[0].globalRatio.source, "OKX");
+  assert.equal(payload.assets[0].globalRatio.state, "live");
 });
 
 test("merge rejects empty providers and stale cache expires honestly", () => {
-  assert.throws(() => market(null, null), /No market records/);
+  assert.throws(() => market(null), /No market records/);
   const payload = market();
   const stale = markPayloadStale(payload, 1_000, 2_000, 5_000);
   assert.equal(stale?.assets[0].price.state, "stale");
@@ -247,4 +288,3 @@ test("identity extraction keeps users distinct and only allows local development
   assert.equal(authenticatedUserId(new Request("https://site.test/api")), null);
   assert.equal(authenticatedUserId(new Request("http://localhost:3000/api")), "local-development-user");
 });
-

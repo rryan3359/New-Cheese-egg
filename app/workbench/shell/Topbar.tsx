@@ -8,7 +8,6 @@ type TopbarProps = {
   updatedAt: string;
   theme: "light" | "dark";
   refreshing: boolean;
-  fallbackTesting: boolean;
   loading: boolean;
   onToggleTheme: () => void;
   onRefresh: () => void;
@@ -20,12 +19,11 @@ export function Topbar({
   updatedAt,
   theme,
   refreshing,
-  fallbackTesting,
   loading,
   onToggleTheme,
   onRefresh,
 }: TopbarProps) {
-  const busy = refreshing || fallbackTesting || loading;
+  const busy = refreshing || loading;
 
   return (
     <header className="workbench-topbar">

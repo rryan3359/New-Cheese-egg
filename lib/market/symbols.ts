@@ -1,4 +1,4 @@
-/** Shared core perpetual symbols — keep Binance & OKX in sync.
+/** Core OKX USDT perpetual symbols.
  *  ~30 high-liquidity USDT perps (by contract liquidity, not spot market-cap top 100).
  */
 export const CORE_BASES = [

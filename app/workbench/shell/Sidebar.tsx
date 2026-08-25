@@ -7,7 +7,7 @@ export type NavItem = { id: string; number: string; label: string; eyebrow: stri
 type SidebarProps = {
   navigation: NavItem[];
   activeView: string;
-  healthTone: "live" | "fallback" | "stale";
+  healthTone: "live" | "stale" | "missing";
   sidebarCollapsed: boolean;
   navBadge: (id: string) => number;
   onNavigate: (view: string) => void;
@@ -49,8 +49,8 @@ export function Sidebar({ navigation, activeView, healthTone, sidebarCollapsed, 
       <div className={`sidebar-status ${healthTone}`}>
         <span />
         <div>
-          <b>{healthTone === "live" ? "行情已連線" : healthTone === "fallback" ? "備援行情中" : "顯示最近資料"}</b>
-          <small>{healthTone === "live" ? "Binance 即時來源" : healthTone === "fallback" ? "OKX 已接手" : "正在背景重試"}</small>
+          <b>{healthTone === "live" ? "行情已連線" : healthTone === "stale" ? "顯示最近資料" : "行情暫時不可用"}</b>
+          <small>{healthTone === "live" ? "OKX 即時來源" : healthTone === "stale" ? "OKX 正在背景重試" : "可使用離線工具"}</small>
         </div>
       </div>
     </aside>

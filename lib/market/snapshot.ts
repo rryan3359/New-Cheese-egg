@@ -3,8 +3,8 @@ import type { MarketHubPayload } from "./types";
 
 const metricSchema = z.object({
   value: z.unknown().nullable(),
-  source: z.enum(["Binance", "OKX", "Alternative.me", "Calculated"]),
-  state: z.enum(["live", "fallback", "stale", "missing"]),
+  source: z.enum(["OKX", "Alternative.me", "Calculated"]),
+  state: z.enum(["live", "stale", "missing"]),
   updatedAt: z.string().datetime(),
   latencyMs: z.number().nonnegative().nullable(),
   reason: z.string().nullable(),
@@ -29,8 +29,8 @@ const snapshotSchema = z.object({
   updatedAt: z.string().datetime(),
   staleExpiresAt: z.string().datetime().nullable(),
   assets: z.array(assetSchema).min(1).max(50),
-  health: z.array(z.object({ name: z.enum(["Binance", "OKX", "Alternative.me"]), state: z.enum(["live", "fallback", "stale", "missing"]) }).passthrough()).min(1),
-  pipeline: z.object({ mode: z.enum(["normal", "force-okx"]), marketApiDurationMs: z.number().nonnegative() }).passthrough(),
+  health: z.array(z.object({ name: z.enum(["OKX", "Alternative.me"]), state: z.enum(["live", "stale", "missing"]) }).passthrough()).min(1),
+  pipeline: z.object({ mode: z.literal("normal"), marketApiDurationMs: z.number().nonnegative() }).passthrough(),
 }).passthrough();
 
 export function validateAlertSnapshot(input: unknown, now = Date.now()): MarketHubPayload {

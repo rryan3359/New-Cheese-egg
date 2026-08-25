@@ -159,9 +159,11 @@ export default function TradingViewWidget({
         data-symbol={symbol}
         data-timeframe={timeframe}
       />
-      <p className="tv-source-note">
-        圖表來源：TradingView（{toTvSymbol(symbol)} · {timeframe}）。策略數字來自 Market Data Hub；兩者可能非同一交易所，以計畫卡為準。
-      </p>
+      <div className="tv-source-note" role="note" aria-label="圖表與策略資料來源說明">
+        <span><b>圖表來源</b> TradingView · {toTvSymbol(symbol)} · {timeframe}</span>
+        <span><b>策略資料來源</b> OKX · Cheese&amp;Egg Market Data Hub</span>
+        <p>圖表與策略可能來自不同交易所，價格與 K 線不保證完全一致。Trade Plan 的 Entry、Stop、TP 與 RR 一律以 Market Data Hub 計畫卡為準。</p>
+      </div>
     </div>
   );
 }

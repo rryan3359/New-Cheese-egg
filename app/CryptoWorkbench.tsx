@@ -27,7 +27,7 @@ type ViewId = "cockpit" | "scanner" | "derivatives" | "strategy" | "chart" | "al
 type ThemeMode = "light" | "dark";
 
 const navigation = [
-  { id: "cockpit", number: "01", label: "市場總攬", eyebrow: "MARKET COCKPIT" },
+  { id: "cockpit", number: "01", label: "市場駕駛艙", eyebrow: "MARKET COCKPIT" },
   { id: "scanner", number: "02", label: "機會掃描器", eyebrow: "OPPORTUNITY SCANNER" },
   { id: "derivatives", number: "03", label: "衍生品", eyebrow: "DERIVATIVES" },
   { id: "strategy", number: "04", label: "策略工作台", eyebrow: "STRATEGY DESK" },
@@ -69,7 +69,7 @@ export default function CryptoWorkbench() {
     setPersistenceReason,
   });
 
-  const { data, loading, refreshing, fallbackTesting, loadStage, error, refresh, abortAllMarketRequests, hydrateFromCache } = useMarketData({
+  const { data, loading, refreshing, loadStage, error, refresh, abortAllMarketRequests, hydrateFromCache } = useMarketData({
     evaluateCurrentAlerts,
     refreshSeconds: settings.refreshSeconds,
     hydrated,
@@ -116,10 +116,10 @@ export default function CryptoWorkbench() {
     const collapsed = parseStored<boolean>(storageKeys.sidebar, false);
     const savedTheme = localStorage.getItem(storageKeys.theme) === "dark" ? "dark" : "light";
     document.documentElement.dataset.theme = savedTheme;
+    hydrateFromCache();
 
     queueMicrotask(() => {
       if (navigation.some((item) => item.id === hash)) setActiveView(hash as ViewId);
-      hydrateFromCache();
       setAlerts(localAlerts);
       alertsRef.current = localAlerts;
       setAlertEvents(localEvents);
@@ -129,6 +129,9 @@ export default function CryptoWorkbench() {
       setTheme(savedTheme);
       setHydrated(true);
     });
+
+    // Market data starts immediately and never waits for user-data / D1 discovery.
+    void refresh();
 
     const controller = new AbortController();
     void (async () => {
@@ -140,7 +143,6 @@ export default function CryptoWorkbench() {
         setJournal(cloud.journal);
         setSettings({ ...defaultSettings, ...cloud.settings });
       }
-      if (!controller.signal.aborted) void refresh();
     })();
 
     return () => {
@@ -183,43 +185,70 @@ export default function CryptoWorkbench() {
     void deleteRecord("journal", id);
   };
   const updateSettings = (next: WorkbenchSettings) => setSettings(next);
+  const toggleMobileMore = useCallback(() => setMobileMoreOpen((current) => !current), []);
+  const closeMobileMore = useCallback(() => setMobileMoreOpen(false), []);
 
-  const healthTone = useMemo((): "live" | "fallback" | "stale" => {
+  const healthTone = useMemo((): "live" | "stale" | "missing" => {
+    if (!data) return "missing";
     if (error) return "stale";
-    if (data?.assets.some((asset) => asset.price.state === "fallback") || data?.health.some((provider) => provider.state === "fallback")) return "fallback";
     if (data?.health.some((provider) => provider.state === "missing" || provider.state === "stale")) return "stale";
     return "live";
   }, [data, error]);
 
   const activeLabel = navigation.find((item) => item.id === activeView)?.label ?? "市場駕駛艙";
   const updatedAt = data ? new Date(data.updatedAt).toLocaleTimeString("zh-TW", { hour12: false }) : "—";
-  const warningCount = data?.health.filter((provider) => provider.state === "missing" || provider.state === "fallback").length ?? 0;
+  const warningCount = data?.health.filter((provider) => provider.state === "missing" || provider.state === "stale").length ?? (error ? 1 : 0);
   const triggeredCount = alerts.filter((alert) => alert.currentStatus === "triggered").length;
   const navBadge = useCallback((id: string) => (id === "alerts" ? triggeredCount : id === "health" ? warningCount : 0), [triggeredCount, warningCount]);
 
   const renderView = () => {
-    if (!data) {
+    const marketUnavailable = (label: string) => (
+      <EmptyState
+        title={loading ? `${label}載入中 · ${loadStage}` : `${label}暫時不可用`}
+        copy={
+          loading
+            ? "正在從 OKX 取得關鍵行情；其他不依賴即時價格的功能仍可使用。"
+            : error ?? "目前沒有可用行情，請稍後重試"
+        }
+        actionLabel={loading ? undefined : "重新嘗試"}
+        onAction={loading ? undefined : () => void refresh()}
+      />
+    );
+
+    if (!data && ["cockpit", "scanner", "derivatives", "strategy", "chart"].includes(activeView)) {
+      const label = navigation.find((item) => item.id === activeView)?.label ?? "市場功能";
+      return marketUnavailable(label);
+    }
+
+    switch (activeView) {
+      case "alerts":
       return (
-        <EmptyState
-          title={loading ? `載入中 · ${loadStage}` : "目前沒有可用市場資料"}
-          copy={
-            error ??
-            (loading
-              ? "正在從 OKX 抓取價格、資金費率、OI／多空比與 K 線，請稍候數秒。"
-              : "正在從 OKX 取得永續合約行情。")
-          }
+        <AlertsView
+          data={data}
+          alerts={alerts}
+          events={alertEvents}
+          watchlist={settings.watchlist}
+          persistence={persistence}
+          onUpsert={upsertAlert}
+          onDelete={deleteAlert}
         />
       );
-    }
-    switch (activeView) {
+      case "risk":
+        return <RiskView settings={settings} />;
+      case "journal":
+        return <JournalView journal={journal} persistence={persistence} onUpsert={upsertJournal} onDelete={deleteJournal} />;
+      case "health":
+        return <HealthView data={data} refreshing={refreshing} onRefresh={() => void refresh()} />;
+      case "settings":
+        return <SettingsView settings={settings} persistence={persistence} onChange={updateSettings} data={data} />;
       case "scanner":
-        return <ScannerView data={data} watchlist={settings.watchlist} onOpenChart={openChart} />;
+        return data ? <ScannerView data={data} watchlist={settings.watchlist} onOpenChart={openChart} /> : marketUnavailable("機會掃描器");
       case "derivatives":
-        return <DerivativesView data={data} />;
+        return data ? <DerivativesView data={data} /> : marketUnavailable("衍生品");
       case "strategy":
-        return <StrategyView data={data} onOpenChart={openChart} />;
+        return data ? <StrategyView data={data} onOpenChart={openChart} /> : marketUnavailable("策略工作台");
       case "chart":
-        return (
+        return data ? (
           <ChartView
             key={`${selectedSymbol}-${selectedTimeframe}-${selectedStrategy ?? "default"}`}
             data={data}
@@ -230,29 +259,9 @@ export default function CryptoWorkbench() {
             onSymbolChange={setSelectedSymbol}
             theme={theme}
           />
-        );
-      case "alerts":
-        return (
-          <AlertsView
-            data={data}
-            alerts={alerts}
-            events={alertEvents}
-            watchlist={settings.watchlist}
-            persistence={persistence}
-            onUpsert={upsertAlert}
-            onDelete={deleteAlert}
-          />
-        );
-      case "risk":
-        return <RiskView data={data} settings={settings} journal={journal} />;
-      case "journal":
-        return <JournalView journal={journal} persistence={persistence} onUpsert={upsertJournal} onDelete={deleteJournal} />;
-      case "health":
-        return <HealthView data={data} fallbackTesting={fallbackTesting} onFallbackTest={() => void refresh(true)} />;
-      case "settings":
-        return <SettingsView settings={settings} persistence={persistence} onChange={updateSettings} data={data} />;
+        ) : marketUnavailable("圖表決策");
       default:
-        return <CockpitView data={data} watchlist={settings.watchlist} onNavigate={navigate} onOpenChart={openChart} />;
+        return data ? <CockpitView data={data} watchlist={settings.watchlist} onNavigate={navigate} onOpenChart={openChart} /> : marketUnavailable("市場駕駛艙");
     }
   };
 
@@ -273,22 +282,21 @@ export default function CryptoWorkbench() {
         mobileMoreOpen={mobileMoreOpen}
         navBadge={navBadge}
         onNavigate={navigate}
-        onToggleMore={() => setMobileMoreOpen((current) => !current)}
-        onCloseMore={() => setMobileMoreOpen(false)}
+        onToggleMore={toggleMobileMore}
+        onCloseMore={closeMobileMore}
       />
       <section className="workbench-main">
         <Topbar
           activeLabel={activeLabel}
-          persistenceLabel={persistence === "d1" ? "私人同步" : ""}
+          persistenceLabel={persistence === "d1" ? "私人同步" : "此裝置"}
           updatedAt={updatedAt}
           theme={theme}
           refreshing={refreshing}
-          fallbackTesting={fallbackTesting}
           loading={loading}
           onToggleTheme={toggleTheme}
           onRefresh={() => void refresh()}
         />
-        <PriceTicker data={data} onSelect={(symbol) => openChart(symbol)} />
+        <PriceTicker data={data} loading={loading} error={error} onSelect={(symbol) => openChart(symbol)} />
         <div className="workbench-content">
           <DataBanners
             loadStage={loadStage}

@@ -8,18 +8,17 @@ export function metric<T>(value: T | null, source: Metric<T>["source"], state: D
   return { value, source, state, updatedAt: now, latencyMs, reason };
 }
 
-/** OKX is the sole market provider; secondary kept for optional dual-source tests only. */
-export function chooseMetric<T>(primary: T | null | undefined, fallback: T | null | undefined, primaryLatency: number | null, fallbackLatency: number | null, missingReason: string, now: string): Metric<T> {
-  if (primary !== null && primary !== undefined) return metric(primary, "OKX", "live", primaryLatency, null, now);
-  if (fallback !== null && fallback !== undefined) return metric(fallback, "OKX", "fallback", fallbackLatency, "次要來源補洞", now);
+/** OKX is the sole market provider. Missing fields stay missing. */
+export function okxMetric<T>(value: T | null | undefined, latency: number | null, missingReason: string, now: string): Metric<T> {
+  if (value !== null && value !== undefined) return metric(value, "OKX", "live", latency, null, now);
   return metric<T>(null, "Calculated", "missing", null, missingReason, now);
 }
 
-function calculated<T>(value: T | null, source: "Binance" | "OKX" | "Calculated", state: DataState, latency: number | null, reason: string, now: string) {
+function calculated<T>(value: T | null, source: "OKX" | "Calculated", state: DataState, latency: number | null, reason: string, now: string) {
   return metric(value, source, value === null ? "missing" : state, latency, value === null ? reason : null, now);
 }
 
-function buildTimeframe(timeframe: Timeframe, candles: TimeframeSnapshot["candles"], source: "Binance" | "OKX" | "Calculated", state: DataState, latency: number | null, now: string): TimeframeSnapshot {
+function buildTimeframe(timeframe: Timeframe, candles: TimeframeSnapshot["candles"], source: "OKX" | "Calculated", state: DataState, latency: number | null, now: string): TimeframeSnapshot {
   const closes = candles.map((candle) => candle.close);
   const currentAtr = atr(candles);
   const ema20 = ema(closes, 20);
@@ -63,7 +62,6 @@ function preferredSetup(strategies: StrategyResult[]) {
 }
 
 export function mergeProviderPayloads(input: {
-  binance: ProviderPayload | null;
   okx: ProviderPayload | null;
   fearGreed: MarketHubPayload["fearGreed"];
   fearHealth: MarketHubPayload["health"][number];
@@ -72,20 +70,17 @@ export function mergeProviderPayloads(input: {
   pipeline?: MarketHubPayload["pipeline"];
 }): MarketHubPayload {
   const now = input.now ?? new Date().toISOString();
-  // Primary = OKX only (Binance path removed). `binance` input ignored if present.
-  const primaryMap = new Map((input.okx?.assets ?? []).map((asset) => [asset.symbol, asset]));
-  const fallbackMap = new Map((input.binance?.assets ?? []).map((asset) => [asset.symbol, asset]));
-  const symbols = Array.from(new Set([...primaryMap.keys(), ...fallbackMap.keys()]));
+  const okxMap = new Map((input.okx?.assets ?? []).map((asset) => [asset.symbol, asset]));
+  const symbols = Array.from(okxMap.keys());
   const assets = symbols.map((symbol): AssetSnapshot => {
-    const primary = primaryMap.get(symbol);
-    const fallback = fallbackMap.get(symbol);
-    const funding = chooseMetric(primary?.funding, fallback?.funding, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Funding 在 OKX 缺少", now);
-    const oiChange = chooseMetric(primary?.oiChange1h, fallback?.oiChange1h, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "OI change 在 OKX 缺少", now);
-    const quoteVolume = chooseMetric(primary?.quoteVolume, fallback?.quoteVolume, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Quote volume unavailable", now);
-    const volumeSource = primary?.quoteVolume !== null && primary?.quoteVolume !== undefined ? primary : fallback?.quoteVolume !== null && fallback?.quoteVolume !== undefined ? fallback : null;
-    const topRatios = (primary?.topRatios?.length ? primary.topRatios : fallback?.topRatios) ?? [];
-    const globalRatios = (primary?.globalRatios?.length ? primary.globalRatios : fallback?.globalRatios) ?? [];
-    const ratioSource: "Binance" | "OKX" | "Calculated" = primary?.topRatios?.length || primary?.globalRatios?.length ? "OKX" : fallback?.globalRatios?.length || fallback?.topRatios?.length ? "OKX" : "Calculated";
+    const okx = okxMap.get(symbol);
+    const latency = okx?.latencyMs ?? null;
+    const funding = okxMetric(okx?.funding, latency, "Funding 在 OKX 缺少", now);
+    const oiChange = okxMetric(okx?.oiChange1h, latency, "OI change 在 OKX 缺少", now);
+    const quoteVolume = okxMetric(okx?.quoteVolume, latency, "Quote volume 在 OKX 缺少", now);
+    const topRatios = okx?.topRatios ?? [];
+    const globalRatios = okx?.globalRatios ?? [];
+    const ratioSource: "OKX" | "Calculated" = topRatios.length || globalRatios.length ? "OKX" : "Calculated";
     // OKX: global account ratio + top-trader account ratio (when available)
     let position: number | null = null;
     let positionReason: string | null = "Positioning 需要 OKX Global／大戶多空比歷史";
@@ -102,12 +97,10 @@ export function mergeProviderPayloads(input: {
       positionReason = "僅有 Global 多空比（大戶比不足），傾向分數為簡化估算";
     }
     const timeframes = Object.fromEntries(TIMEFRAMES.map((timeframe) => {
-      const primaryCandles = primary?.candlesByTimeframe[timeframe] ?? [];
-      const fallbackCandles = fallback?.candlesByTimeframe[timeframe] ?? [];
-      const candles = primaryCandles.length ? primaryCandles : fallbackCandles;
-      const source = primaryCandles.length || fallbackCandles.length ? "OKX" : "Calculated";
+      const candles = okx?.candlesByTimeframe[timeframe] ?? [];
+      const source = candles.length ? "OKX" : "Calculated";
       const state: DataState = candles.length ? "live" : "missing";
-      return [timeframe, buildTimeframe(timeframe, candles, source, state, primary?.latencyMs ?? fallback?.latencyMs ?? null, now)];
+      return [timeframe, buildTimeframe(timeframe, candles, source, state, latency, now)];
     })) as Record<Timeframe, TimeframeSnapshot>;
     // Only evaluate strategies when at least one timeframe has candles (L3); otherwise empty + honest missing downstream
     const hasAnyCandles = TIMEFRAMES.some((tf) => timeframes[tf].candles.length > 0);
@@ -127,25 +120,37 @@ export function mergeProviderPayloads(input: {
       : [];
     return {
       symbol, name: NAMES[symbol.replace("USDT", "")] ?? symbol,
-      price: chooseMetric(primary?.price, fallback?.price, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Price unavailable", now),
+      price: okxMetric(okx?.price, latency, "Price 在 OKX 缺少", now),
       change15m: timeframes["15m"].change, change1h: timeframes["1h"].change, change4h: timeframes["4h"].change,
-      change24h: chooseMetric(primary?.change24h, fallback?.change24h, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "24h change unavailable", now),
+      change24h: okxMetric(okx?.change24h, latency, "24h change 在 OKX 缺少", now),
       quoteVolume,
-      quoteVolumeUnit: volumeSource?.quoteVolumeUnit ?? null,
-      quoteVolumeMethod: volumeSource?.quoteVolumeMethod ?? "成交量單位無法確認，不參與跨來源排序",
-      openInterest: chooseMetric(primary?.openInterest, fallback?.openInterest, primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "OI unavailable", now),
+      quoteVolumeUnit: okx?.quoteVolume !== null && okx?.quoteVolume !== undefined ? okx.quoteVolumeUnit : null,
+      quoteVolumeMethod: okx?.quoteVolume !== null && okx?.quoteVolume !== undefined ? okx.quoteVolumeMethod : "成交量單位無法確認，不參與排序",
+      openInterest: okxMetric(okx?.openInterest, latency, "OI 在 OKX 缺少", now),
       oiChange1h: oiChange, funding,
-      globalRatio: chooseMetric(primary?.globalRatios.at(-1), fallback?.globalRatios.at(-1), primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "Global 多空比在 OKX 缺少", now),
-      topRatio: chooseMetric(primary?.topRatios.at(-1), fallback?.topRatios.at(-1), primary?.latencyMs ?? null, fallback?.latencyMs ?? null, "大戶多空比資料不足（OKX top trader）", now),
-      positioning: metric(position, ratioSource === "Calculated" ? "Calculated" : "OKX", position === null ? "missing" : "live", primary?.latencyMs ?? fallback?.latencyMs ?? null, position === null ? positionReason : (positionReason ?? "交易所帳戶多空傾向，非真實持倉集中度"), now),
+      globalRatio: okxMetric(okx?.globalRatios.at(-1), latency, "Global 多空比在 OKX 缺少", now),
+      topRatio: okxMetric(okx?.topRatios.at(-1), latency, "大戶多空比資料不足（OKX top trader）", now),
+      positioning: metric(position, ratioSource, position === null ? "missing" : "live", latency, position === null ? positionReason : (positionReason ?? "交易所帳戶多空傾向，非真實持倉集中度"), now),
       timeframes, strategies, setup: preferredSetup(strategies),
     };
   }).filter((asset) => asset.price.value !== null || TIMEFRAMES.some((timeframe) => asset.timeframes[timeframe].candles.length));
   if (!assets.length) throw new Error("No market records from OKX");
-  const advancing = assets.filter((asset) => (asset.change24h.value ?? 0) > 0).length;
-  const trendingUp = assets.filter((asset) => asset.timeframes["4h"].trend.value === "Trend Up").length;
-  const highVol = assets.filter((asset) => asset.timeframes["1h"].volatility.value === "High").length;
-  const regime = highVol >= Math.ceil(assets.length / 2) ? "High Volatility" : trendingUp >= Math.ceil(assets.length * .6) ? "Trend Up" : advancing <= assets.length * .3 ? "Risk-Off" : "Range";
+  const knownChanges = assets.filter((asset) => asset.change24h.value !== null);
+  const knownTrends = assets.filter((asset) => asset.timeframes["4h"].trend.value !== null);
+  const knownVolatility = assets.filter((asset) => asset.timeframes["1h"].volatility.value !== null);
+  const advancing = knownChanges.filter((asset) => asset.change24h.value! > 0).length;
+  const declining = knownChanges.filter((asset) => asset.change24h.value! < 0).length;
+  const trendingUp = knownTrends.filter((asset) => asset.timeframes["4h"].trend.value === "Trend Up").length;
+  const highVol = knownVolatility.filter((asset) => asset.timeframes["1h"].volatility.value === "High").length;
+  const regime = knownVolatility.length && highVol >= Math.ceil(knownVolatility.length / 2)
+    ? "High Volatility"
+    : knownTrends.length && trendingUp >= Math.ceil(knownTrends.length * .6)
+      ? "Trend Up"
+      : knownChanges.length && advancing <= knownChanges.length * .3
+        ? "Risk-Off"
+        : knownChanges.length
+          ? "Range"
+          : "N/A";
   const riskAlerts = assets.flatMap((asset) => {
     const alerts: string[] = [];
     if (asset.funding.value !== null && Math.abs(asset.funding.value) > .0005) alerts.push(`${asset.symbol.replace("USDT", "")} Funding 過熱`);
@@ -162,7 +167,7 @@ export function mergeProviderPayloads(input: {
     staleExpiresAt: new Date(new Date(now).getTime() + (input.staleTtlMs ?? 10 * 60_000)).toISOString(),
     assets,
     fearGreed: input.fearGreed,
-    breadth: { advancing, declining: assets.length - advancing, total: assets.length },
+    breadth: { advancing, declining, total: knownChanges.length },
     regime,
     riskAlerts,
     health,
@@ -183,7 +188,6 @@ export function markPayloadStale(payload: MarketHubPayload, storedAt: number, no
   if (now - storedAt > ttlMs) return null;
   const stale = structuredClone(payload);
   stale.cacheAgeMs = now - storedAt;
-  stale.updatedAt = new Date(now).toISOString();
   stale.staleExpiresAt = new Date(storedAt + ttlMs).toISOString();
   stale.pipeline = { ...stale.pipeline, stage: "showing-stale" };
   for (const asset of stale.assets) {
@@ -192,7 +196,7 @@ export function markPayloadStale(payload: MarketHubPayload, storedAt: number, no
         const value = candidate as Metric<unknown>;
         if (value.state !== "missing") {
           value.state = "stale";
-          value.reason = "顯示最後成功資料；主要與備援來源正在重試";
+          value.reason = "行情服務暫時不可用；顯示最後成功資料";
         }
       }
     };
@@ -203,6 +207,10 @@ export function markPayloadStale(payload: MarketHubPayload, storedAt: number, no
     stale.fearGreed.state = "stale";
     stale.fearGreed.reason = "顯示最後成功資料";
   }
+  stale.health = stale.health.map((provider) => ({
+    ...provider,
+    state: provider.state === "missing" ? "missing" : "stale",
+  }));
   return stale;
 }
 

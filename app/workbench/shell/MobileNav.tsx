@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { NavItem } from "./Sidebar";
 
 type MobileNavProps = {
@@ -131,6 +132,56 @@ export function MobileNav({
   const right = navigation.slice(2, 4);
   const more = navigation.slice(4);
   const moreActive = mobileMoreOpen || more.some((item) => item.id === activeView);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mobileMoreOpen) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const moreButton = moreButtonRef.current;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    const focusable = () => Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+
+    window.requestAnimationFrame(() => focusable()[0]?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseMore();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = items[0];
+      const last = items.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      window.requestAnimationFrame(() => moreButton?.focus());
+    };
+  }, [mobileMoreOpen, onCloseMore]);
 
   return (
     <>
@@ -157,10 +208,12 @@ export function MobileNav({
           })}
 
           <button
+            ref={moreButtonRef}
             type="button"
             className={`mobile-tab mobile-tab--center${moreActive ? " active" : ""}`}
             onClick={onToggleMore}
             aria-expanded={mobileMoreOpen}
+            aria-controls="mobile-more-dialog"
             aria-label="更多功能"
           >
             <span className="mobile-tab__fab" aria-hidden>
@@ -194,9 +247,11 @@ export function MobileNav({
       </nav>
 
       {mobileMoreOpen && (
-        <div className="mobile-more-menu" role="dialog" aria-label="更多功能">
+        <>
+        <div className="mobile-more-backdrop" aria-hidden="true" onMouseDown={onCloseMore} />
+        <div ref={dialogRef} id="mobile-more-dialog" className="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title">
           <header>
-            <b>全部功能</b>
+            <b id="mobile-more-title">全部功能</b>
             <button type="button" onClick={onCloseMore} aria-label="關閉更多功能">
               ×
             </button>
@@ -221,6 +276,7 @@ export function MobileNav({
             );
           })}
         </div>
+        </>
       )}
     </>
   );

@@ -6,7 +6,7 @@ import type { LoadStage } from "../../hooks/useMarketData";
 
 type DataBannersProps = {
   loadStage: LoadStage;
-  healthTone: "live" | "fallback" | "stale";
+  healthTone: "live" | "stale" | "missing";
   data: MarketHubPayload | null;
   error: string | null;
   persistence: "d1" | "device";
@@ -66,15 +66,17 @@ export function DataBanners({
         </div>
       )}
 
-      {error && data && (
-        <div className="data-banner warning-banner">
+      {(error || data?.pipeline.stage === "showing-stale") && (
+        <div className="data-banner warning-banner" aria-live="polite">
           <span>!</span>
           <p>
-            <b>這次沒有更新成功</b>
-            先保留上一份可用行情，你可以稍後再試。
+            <b>{data ? "行情服務暫時不可用，已保留最後成功資料" : "目前沒有可用行情，請稍後重試"}</b>
+            {data
+              ? `最後成功更新：${new Date(data.updatedAt).toLocaleString("zh-TW")} · 狀態：稍早資料。`
+              : "設定、交易日誌、警報歷史、資料健康與離線風險試算仍可使用。"}
           </p>
           <button type="button" onClick={onRefresh}>
-            再試一次
+            重新嘗試
           </button>
         </div>
       )}
