@@ -27,8 +27,8 @@ type ViewId = "cockpit" | "scanner" | "derivatives" | "strategy" | "chart" | "al
 type ThemeMode = "light" | "dark";
 
 const navigation = [
-  { id: "cockpit", number: "01", label: "今日作戰台", eyebrow: "TODAY'S QUANT DESK" },
-  { id: "scanner", number: "02", label: "機會掃描器", eyebrow: "OPPORTUNITY SCANNER" },
+  { id: "cockpit", number: "01", label: "交易總攬", eyebrow: "TODAY'S QUANT DESK" },
+  { id: "scanner", number: "02", label: "機會掃描", eyebrow: "OPPORTUNITY SCANNER" },
   { id: "derivatives", number: "03", label: "衍生品", eyebrow: "DERIVATIVES" },
   { id: "strategy", number: "04", label: "策略工作台", eyebrow: "STRATEGY DESK" },
   { id: "chart", number: "05", label: "圖表決策", eyebrow: "CHART WORKSPACE" },
@@ -308,7 +308,7 @@ export default function CryptoWorkbench() {
       <section className="workbench-main">
         <Topbar
           activeLabel={activeLabel}
-          persistenceLabel={persistence === "d1" ? "私人同步" : "此裝置"}
+          persistenceLabel={persistence === "d1" ? "私人同步" : ""}
           updatedAt={updatedAt}
           theme={theme}
           refreshing={refreshing}
