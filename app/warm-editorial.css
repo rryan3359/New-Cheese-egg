@@ -744,6 +744,7 @@ html[data-theme="light"] .opportunity-card-v13 {
 .no-trade-decision p { color: rgba(247, 245, 239, .66); }
 
 .filter-bar { gap: 14px; padding: 17px; }
+.filter-bar > span { grid-column: 1 / -1; justify-self: end; }
 .filter-bar label,
 .form-grid label { color: var(--muted-foreground); font-size: 11px; letter-spacing: .025em; }
 input,
@@ -878,6 +879,34 @@ html[data-theme="light"] .decision-plan-card {
 .decision-plan-card .direction.long { color: #b8d7c2; background: rgba(114, 170, 137, .15); border-color: rgba(184, 215, 194, .25); }
 .decision-plan-card .direction.short { color: #e5b0a8; background: rgba(196, 122, 112, .14); border-color: rgba(229, 176, 168, .25); }
 
+html[data-theme="light"] .decision-plan-card {
+  color: var(--foreground);
+  background: var(--surface);
+  border-color: var(--border);
+}
+html[data-theme="light"] .decision-plan-card .panel-heading { border-bottom-color: var(--border-soft); }
+html[data-theme="light"] .decision-plan-card .panel-heading h2,
+html[data-theme="light"] .decision-plan-card .plan-copy,
+html[data-theme="light"] .decision-plan-card .checklist > li.done,
+html[data-theme="light"] .decision-plan-card .formula-note > b { color: var(--foreground); }
+html[data-theme="light"] .decision-plan-card .panel-heading > span,
+html[data-theme="light"] .decision-plan-card .plan-copy,
+html[data-theme="light"] .decision-plan-card .checklist > li,
+html[data-theme="light"] .decision-plan-card .formula-note > p,
+html[data-theme="light"] .decision-plan-card .plan-regime em { color: var(--muted-foreground); }
+html[data-theme="light"] .decision-plan-card .plan-levels,
+html[data-theme="light"] .decision-plan-card .formula-note {
+  color: var(--foreground);
+  background: var(--surface-secondary);
+  border-color: var(--border-soft);
+}
+html[data-theme="light"] .decision-plan-card .plan-levels span,
+html[data-theme="light"] .decision-plan-card .plan-levels small { color: var(--muted-foreground); }
+html[data-theme="light"] .decision-plan-card .plan-levels b { color: var(--foreground); }
+html[data-theme="light"] .decision-plan-card .checklist > li { border-bottom-color: var(--border-soft); }
+html[data-theme="light"] .decision-plan-card .direction.long { color: var(--positive); background: var(--positive-soft); border-color: color-mix(in srgb, var(--positive) 28%, var(--border)); }
+html[data-theme="light"] .decision-plan-card .direction.short { color: var(--negative); background: var(--negative-soft); border-color: color-mix(in srgb, var(--negative) 28%, var(--border)); }
+
 .calculator-output,
 html[data-theme="light"] .calculator-output {
   color: var(--primary-foreground);
@@ -891,6 +920,24 @@ html[data-theme="light"] .calculator-output {
 .calculator-output .output-grid span small { color: rgba(247, 245, 239, .56); }
 .calculator-output .output-grid b { color: var(--primary-foreground); }
 .calculator-output .target-table > div { border-bottom-color: rgba(247, 245, 239, .1); }
+
+html[data-theme="light"] .calculator-output {
+  color: var(--foreground);
+  background: var(--surface-secondary);
+  border-color: var(--border);
+}
+html[data-theme="light"] .calculator-output .panel-heading { border-bottom-color: var(--border-soft); }
+html[data-theme="light"] .calculator-output .panel-heading h2 { color: var(--foreground); }
+html[data-theme="light"] .calculator-output .output-grid span {
+  color: var(--muted-foreground);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+}
+html[data-theme="light"] .calculator-output .output-grid span small { color: var(--muted-foreground); }
+html[data-theme="light"] .calculator-output .output-grid b { color: var(--foreground); }
+html[data-theme="light"] .calculator-output .output-grid b.positive { color: var(--positive); }
+html[data-theme="light"] .calculator-output .output-grid b.negative { color: var(--negative); }
+html[data-theme="light"] .calculator-output .target-table > div { border-bottom-color: var(--border-soft); }
 
 .liquidation-note,
 .security-note,
@@ -995,6 +1042,7 @@ html:not([data-theme="light"]) .mobile-more-menu > button {
 
 @media (max-width: 480px) {
   .workbench-content { padding-right: 13px; padding-left: 13px; }
+  .filter-bar > span { justify-self: start; }
   .command-split > article,
   .strategy-status-board,
   .opportunity-panel-v13 { padding: 16px; }

@@ -11,7 +11,7 @@ import {
   type StrategyStatus,
   type Timeframe,
 } from "../../lib/market/types";
-import { cockpitAssets, prioritizeByWatchlist, watchlistAssets } from "../../lib/workbench/watchlist";
+import { cockpitAssets, prioritizeByWatchlist } from "../../lib/workbench/watchlist";
 import TradingViewWidget from "./TradingViewWidget";
 
 export type OpenChart = (symbol: string, timeframe?: Timeframe, strategy?: StrategyName) => void;
@@ -155,24 +155,19 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
 }
 
 type ScannerRow = { asset: AssetSnapshot; setup: StrategyResult };
-export function ScannerView({ data, watchlist, minimumNetRr = 1.5, onOpenChart }: { data: MarketHubPayload; watchlist: string[]; minimumNetRr?: number; onOpenChart: OpenChart }) {
+export function ScannerView({ data, minimumNetRr = 1.5, onOpenChart }: { data: MarketHubPayload; watchlist: string[]; minimumNetRr?: number; onOpenChart: OpenChart }) {
   const [search, setSearch] = useState("");
   const [timeframe, setTimeframe] = useState<Timeframe | "All">("All");
   const [strategy, setStrategy] = useState<StrategyName | "All">("All");
   const [direction, setDirection] = useState("All");
-  const [status, setStatus] = useState<StrategyStatus | "All">("All");
-  const [minimumConfidence, setMinimumConfidence] = useState(45);
-  const [minimumRr, setMinimumRr] = useState(Math.max(1.5, minimumNetRr));
-  const [onlyWatchlist, setOnlyWatchlist] = useState(false);
-  const rows = useMemo(() => watchlistAssets(data.assets, watchlist, onlyWatchlist).flatMap((asset) => asset.strategies.map((setup): ScannerRow => ({ asset, setup }))).filter(({ asset, setup }) =>
+  const rows = useMemo(() => data.assets.flatMap((asset) => asset.strategies.map((setup): ScannerRow => ({ asset, setup }))).filter(({ asset, setup }) =>
     asset.symbol.toLowerCase().includes(search.toLowerCase()) &&
     (timeframe === "All" || setup.timeframe === timeframe) && (strategy === "All" || setup.strategy === strategy) &&
-    (direction === "All" || setup.direction === direction) && (status === "All" || setup.status === status) &&
-    setup.confidence >= minimumConfidence && (setup.primaryRiskReward ?? -Infinity) >= minimumRr,
-  ).sort((a, b) => (Number(b.setup.status === "eligible") - Number(a.setup.status === "eligible")) || (b.setup.primaryRiskReward ?? 0) - (a.setup.primaryRiskReward ?? 0) || b.setup.confidence - a.setup.confidence), [data.assets, direction, minimumConfidence, minimumRr, onlyWatchlist, search, status, strategy, timeframe, watchlist]);
+    (direction === "All" || setup.direction === direction) &&
+    (setup.primaryRiskReward ?? -Infinity) >= Math.max(1.5, minimumNetRr),
+  ).sort((a, b) => (Number(b.setup.status === "eligible") - Number(a.setup.status === "eligible")) || (b.setup.primaryRiskReward ?? 0) - (a.setup.primaryRiskReward ?? 0) || b.setup.confidence - a.setup.confidence), [data.assets, direction, minimumNetRr, search, strategy, timeframe]);
   return <div className="view-stack"><ViewTitle eyebrow="OPPORTUNITY SCANNER" title="先看真實空間，再談方向。" copy="只掃描三套策略。預設最低淨 RR 1.5；不足者不進榜，1.5–2R 只觀察，≥2R 且條件完整才可執行。" />
-    <section className="filter-bar"><label>搜尋<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="BTC, ETH, SOL…" /></label><label>週期<select value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe | "All")}><option value="All">全部</option>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select></label><label>策略<select value={strategy} onChange={(event) => setStrategy(event.target.value as StrategyName | "All")}><option value="All">全部</option>{STRATEGY_NAMES.map((item) => <option key={item} value={item}>{strategyLabels[item]}</option>)}</select></label><label>方向<select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="All">全部</option><option value="Long">偏多</option><option value="Short">偏空</option><option value="Neutral">中性</option></select></label><label>狀態<select value={status} onChange={(event) => setStatus(event.target.value as StrategyStatus | "All")}><option value="All">全部</option><option value="eligible">可執行</option><option value="waiting">形成中／觀察</option><option value="applicable">適用</option><option value="invalid">失效／淘汰</option><option value="missing">資料不足</option></select></label><label>最低信心<input type="number" min="0" max="100" value={minimumConfidence} onChange={(event) => setMinimumConfidence(Number(event.target.value))} /></label><label>最低淨 RR<input type="number" min="1.5" step="0.25" value={minimumRr} onChange={(event) => setMinimumRr(Math.max(1.5, Number(event.target.value)))} /></label><button className={onlyWatchlist ? "watchlist-filter active" : "watchlist-filter"} type="button" aria-pressed={onlyWatchlist} onClick={() => setOnlyWatchlist((current) => !current)}>★ 只看自選</button><span>{rows.length} 個結果</span></section>
-    {onlyWatchlist && watchlist.length === 0 && <div className="watchlist-empty">自選清單是空的。請先到「設定」加入幣種。</div>}
+    <section className="filter-bar"><label>搜尋<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="BTC, ETH, SOL…" /></label><label>週期<select value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe | "All")}><option value="All">全部</option>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select></label><label>策略<select value={strategy} onChange={(event) => setStrategy(event.target.value as StrategyName | "All")}><option value="All">全部</option>{STRATEGY_NAMES.map((item) => <option key={item} value={item}>{strategyLabels[item]}</option>)}</select></label><label>方向<select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="All">全部</option><option value="Long">偏多</option><option value="Short">偏空</option><option value="Neutral">中性</option></select></label><span>{rows.length} 個結果</span></section>
     <section className="scanner-table"><div className="scanner-row scanner-head"><span>幣種／週期</span><span>價格／24h</span><span>策略／方向</span><span>狀態</span><span>Entry／Stop</span><span>TP1／2／3</span><span>淨 RR</span><span>信心</span></div>{rows.map(({ asset, setup }) => <button className="scanner-row" key={setup.id} type="button" onClick={() => onOpenChart(asset.symbol, setup.timeframe, setup.strategy)}><span data-label="幣種／週期" className="symbol-cell"><b>{asset.symbol.replace("USDT", "")} · {setup.timeframe}</b><small>{new Date(setup.updatedAt).toLocaleTimeString("zh-TW", { hour12: false })} · {stateLabels[asset.price.state]}</small></span><span data-label="價格／24h"><b>{formatPrice(asset.price.value)}</b><small className={tone(asset.change24h.value)}>{formatPercent(asset.change24h.value)}</small></span><span data-label="策略／方向">{strategyLabels[setup.strategy]}<small>{directionLabels[setup.direction]}</small></span><span data-label="狀態"><StatePill state={setup.status} /><small>{setup.conditionsMet}/{setup.conditionsTotal} 條件</small></span><span data-label="Entry／Stop"><b>{formatPrice(setup.entryLow)}–{formatPrice(setup.entryHigh)}</b><small>Stop {formatPrice(setup.stop)}</small></span><span data-label="TP1／2／3"><b>{formatPrice(setup.tp1)} / {formatPrice(setup.tp2)} / {formatPrice(setup.tp3)}</b><small>{rr(setup.riskRewardTp1)} / {rr(setup.riskRewardTp2)} / {rr(setup.riskRewardTp3)}</small></span><span data-label="淨 RR"><b>{rr(setup.primaryRiskReward)}</b><small>{setup.primaryTarget ?? "N/A"}</small></span><span data-label="信心" className="confidence-cell"><b>{setup.confidence}%</b><i style={{ width: `${setup.confidence}%` }} /></span></button>)}</section>
     {!rows.length && <div className="no-trade-decision"><b>目前不適合交易</b><p>沒有結果通過目前的淨 RR 與條件篩選。等待也是交易決策。</p></div>}
   </div>;
