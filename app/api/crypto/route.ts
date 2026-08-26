@@ -16,7 +16,6 @@ function parseRate(raw: string | null, fallback: number) {
 export async function GET(request: Request) {
   const startedAt = Date.now();
   const url = new URL(request.url);
-  // Compatibility alias for old bookmarked URLs. The hub is always OKX-only.
   const compatibilityAlias = url.searchParams.get("provider") === "okx";
   const tier = parseTier(url.searchParams.get("tier"));
   const costs = {
@@ -35,7 +34,6 @@ export async function GET(request: Request) {
       stage: payload.pipeline.stage,
       okxMs: payload.pipeline.okxDurationMs,
     });
-    // L1 can be shorter-lived; L2/L3 keep previous 45s + SWR
     const maxAge = tier === "l1" ? 20 : 45;
     const swr = tier === "l1" ? 60 : 120;
     return Response.json(payload, {

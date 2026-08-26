@@ -47,7 +47,7 @@ export function useAlerts({ persistenceRef, persistRecord, persistAlertEvaluatio
           setAlertEvents((current) => [browserEvent, ...current].slice(0, 100));
           void persistRecord("alert_event", browserEvent);
         } catch {
-          // In-app delivery remains valid.
+          void 0;
         }
       });
     },

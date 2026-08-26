@@ -23,7 +23,6 @@ function unauthorized() {
   return NextResponse.json({ error: "需要 ChatGPT Sites 使用者身分才能同步資料" }, { status: 401 });
 }
 
-/** Vercel / 無 Sites 身分時：明確回傳 device 模式，前端降級本機，不假裝雲端同步。 */
 function deviceOnlyPayload() {
   return NextResponse.json({
     persistence: "device",
@@ -49,7 +48,6 @@ export async function GET(request: Request) {
   try {
     return NextResponse.json(await loadUserData(userId));
   } catch {
-    // D1 不可用（例如 Vercel）：降級，不要用 503 嚇前端
     return deviceOnlyPayload();
   }
 }

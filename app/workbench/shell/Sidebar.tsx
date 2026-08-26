@@ -1,6 +1,7 @@
 "use client";
 
 import { WorkbenchLogo } from "./WorkbenchLogo";
+import { NavIcon } from "./NavIcon";
 
 export type NavItem = { id: string; number: string; label: string; eyebrow: string };
 
@@ -17,7 +18,7 @@ type SidebarProps = {
 export function Sidebar({ navigation, activeView, healthTone, sidebarCollapsed, navBadge, onNavigate, onToggleSidebar }: SidebarProps) {
   return (
     <aside className="workbench-sidebar">
-      <button className="workbench-brand" type="button" onClick={() => onNavigate("cockpit")} aria-label="Cheese and Egg 市場駕駛艙">
+      <button className="workbench-brand" type="button" onClick={() => onNavigate("cockpit")} aria-label="Cheese and Egg 交易總攬">
         <WorkbenchLogo />
       </button>
       <button className="sidebar-collapse" type="button" onClick={onToggleSidebar} aria-label={sidebarCollapsed ? "展開側邊欄" : "收合側邊欄"} aria-expanded={!sidebarCollapsed}>
@@ -36,7 +37,10 @@ export function Sidebar({ navigation, activeView, healthTone, sidebarCollapsed, 
               aria-label={`${item.number} ${item.label} ${item.eyebrow}`}
               aria-current={item.id === activeView ? "page" : undefined}
             >
-              <span className="nav-number">{item.number}</span>
+              <span className="nav-leading" aria-hidden="true">
+                <NavIcon id={item.id} active={item.id === activeView} size={18} />
+                <span className="nav-number">{item.number}</span>
+              </span>
               <span className="nav-copy">
                 <b>{item.label}</b>
                 <small>{item.eyebrow}</small>

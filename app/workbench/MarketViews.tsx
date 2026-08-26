@@ -93,7 +93,6 @@ function OpportunityCard({ setup, watchlist, actions }: { setup: StrategyResult;
 
 export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreateAlert, onToggleWatchlist }: { data: MarketHubPayload; watchlist: string[]; onNavigate: (view: string) => void } & OpportunityActions) {
   const prioritized = cockpitAssets(data.assets, watchlist);
-  const core = prioritized.slice(0, 2);
   const opportunities = rankSetups(prioritized.flatMap((asset) => asset.strategies).filter((setup) => setup.eligibleForScanner)).slice(0, 5);
   const strategyStates = STRATEGY_NAMES.map((name) => ({ name, best: rankSetups(data.assets.flatMap((asset) => asset.strategies).filter((setup) => setup.strategy === name))[0] ?? null }));
   const primaryLevels = prioritized[0]?.sessionLevels.slice(0, 8) ?? [];
@@ -101,7 +100,7 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
   const actions = { onOpenChart, onCreateAlert, onToggleWatchlist };
   return <div className="view-stack command-center">
     <section className="cockpit-heading view-heading command-hero">
-      <div><p>TODAY&apos;S QUANT DESK</p><h1>交易總攬<br /><i>{noTrade ? "目前不適合交易。" : "只做結構與空間都足夠的機會。"}</i></h1><span>{noTrade ? "等待也是交易決策。沒有達到淨 RR 1.5 的真實目標，就不進機會榜。" : `目前 ${opportunities.length} 個機會通過淨 RR 1.5 初篩；只有條件完整且 ≥2R 才可執行。`}</span></div>
+      <div><p>TRADING OVERVIEW</p><h1>交易總攬<br /><i>{noTrade ? "目前不適合交易。" : "只做結構與空間都足夠的機會。"}</i></h1></div>
       <button type="button" onClick={() => onNavigate("scanner")}>開啟完整掃描器 <span>↗</span></button>
     </section>
 
@@ -109,27 +108,25 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
       <article className={`today-regime ${noTrade ? "no-trade" : ""}`}><span>今日市場狀態</span><strong>{regimeLabels[data.regime] ?? data.regime}</strong><p>{data.breadth.total ? `${data.breadth.advancing}/${data.breadth.total} 檔上漲` : "Breadth N/A"} · {data.pipeline.stage === "showing-stale" ? "稍早資料" : "OKX 即時"}</p></article>
       <article><span>當前交易時段</span><strong>{data.session.label}</strong><p>{data.session.localTime}<br />{data.session.closesAt ? `結束 ${new Date(data.session.closesAt).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", timeZone: data.session.timezone })} ${data.session.timezone}` : "等待下一個主要時段"}</p></article>
       <article><span>衍生品背景</span><strong>{data.riskAlerts.length ? `${data.riskAlerts.length} 項異常` : "未見明顯異常"}</strong><p>Funding／OI／Positioning 只確認背景，不單獨給方向。</p></article>
-      <article><span>決策門檻</span><strong>WATCH</strong><p>淨值已扣雙邊手續費與滑價，不人工拉遠目標。</p></article>
+      <article><span>決策門檻</span><strong>1.5R 觀察 · 2R 執行</strong><p>淨值已扣雙邊手續費與滑價，不人工拉遠目標。</p></article>
     </section>
 
     <section className="command-split">
-      <article className="terminal-panel"><div className="panel-heading"><div><p>WHAT JUST HAPPENED</p><h2>剛剛發生什麼</h2></div><span>{data.recentEvents.length} 事件</span></div>
+      <article className="terminal-panel"><div className="panel-heading"><div><p>WHAT JUST HAPPENED</p><h2>剛剛發生什麼</h2></div></div>
         <div className="event-timeline">{data.recentEvents.length ? data.recentEvents.slice(0, 6).map((event) => <button type="button" key={event.id} onClick={() => onOpenChart(event.symbol, event.kind === "bb_expansion" ? "15m" : "5m")}><i className={event.direction.toLowerCase()} /><span><b>{event.headline}</b><small>{event.detail}</small></span><time>{new Date(event.occurredAt).toLocaleTimeString("zh-TW", { hour12: false })}</time></button>) : <div className="inline-empty">最近已收盤 K 線沒有確認 sweep、BOS/MSS、BB 擴張或衍生品異常。</div>}</div>
       </article>
-      <article className="terminal-panel"><div className="panel-heading"><div><p>SESSION LEVELS</p><h2>{prioritized[0]?.symbol.replace("USDT", "") ?? "市場"} 重要價位</h2></div><span>UTC 儲存 · IANA 時區</span></div>
+      <article className="terminal-panel"><div className="panel-heading"><div><p>SESSION LEVELS</p><h2>{prioritized[0]?.symbol.replace("USDT", "") ?? "市場"} 重要價位</h2></div></div>
         <div className="session-level-grid">{primaryLevels.length ? primaryLevels.map((level) => <span key={level.id}><small>{level.label}</small><b>{formatPrice(level.price)}</b></span>) : <div className="inline-empty">Session levels 資料不足；不補成 0。</div>}</div>
       </article>
     </section>
 
-    <section className="terminal-panel strategy-status-board"><div className="panel-heading"><div><p>THREE PLAYBOOKS</p><h2>三套策略現在適合嗎</h2></div><span></span></div>
-      <div>{strategyStates.map(({ name, best }, index) => <article key={name}><header><b>0{index + 1} · {strategyLabels[name]}</b>{best ? <StatePill state={best.status} /> : <StatePill state="missing" />}</header><p>{best ? `${best.symbol.replace("USDT", "")} · ${best.timeframe} · ${directionLabels[best.direction]}` : "資料不足"}</p><small>{best?.missingConditions[0] ?? best?.reasons[0] ?? strategyTips[name]}</small></article>)}</div>
-    </section>
-
-    <section className="terminal-panel opportunity-panel-v13"><div className="panel-heading"><div><p>BEST OPPORTUNITIES</p><h2>今日最佳機會 · 最多 5 個</h2></div><span>Scanner 預設最低淨 RR 1.5</span></div>
+    <section className="terminal-panel opportunity-panel-v13"><div className="panel-heading"><div><p>BEST OPPORTUNITIES</p><h2>最佳機會 · 最多 5 個</h2></div></div>
       <div className="opportunity-grid-v13">{opportunities.length ? opportunities.map((setup) => <OpportunityCard key={setup.id} setup={setup} watchlist={watchlist} actions={actions} />) : <div className="no-trade-decision"><b>等待也是交易決策</b><p>目前沒有策略同時具備真實結構空間與至少 1.5 的淨 RR。不要為了交易而交易。</p></div>}</div>
     </section>
 
-    <section className="regime-grid live-regime compact-market-cards">{core.map((asset) => <button className="core-asset" key={asset.symbol} type="button" onClick={() => onOpenChart(asset.symbol, "1h")}><div><span className={`coin-mark ${asset.symbol.startsWith("BTC") ? "btc" : "eth"}`}>{asset.symbol[0]}</span><p><b>{asset.symbol.replace("USDT", " / USDT")}</b><small>{asset.name}</small></p><StatePill state={asset.price.state} /></div><strong>{formatPrice(asset.price.value)}</strong><p className={tone(asset.change24h.value)}>{formatPercent(asset.change24h.value)} · 24h</p></button>)}</section>
+    <section className="terminal-panel strategy-status-board"><div className="panel-heading"><div><p>THREE PLAYBOOKS</p><h2>三套策略現在適合嗎</h2></div></div>
+      <div>{strategyStates.map(({ name, best }, index) => <article key={name}><header><b>0{index + 1} · {strategyLabels[name]}</b>{best ? <StatePill state={best.status} /> : <StatePill state="missing" />}</header><p>{best ? `${best.symbol.replace("USDT", "")} · ${best.timeframe} · ${directionLabels[best.direction]}` : "資料不足"}</p><small>{best?.missingConditions[0] ?? best?.reasons[0] ?? strategyTips[name]}</small></article>)}</div>
+    </section>
   </div>;
 }
 

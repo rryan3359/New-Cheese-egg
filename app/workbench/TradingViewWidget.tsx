@@ -3,7 +3,6 @@
 import { useEffect, useId, useRef } from "react";
 import type { Timeframe } from "../../lib/market/types";
 
-/** Map workbench timeframes to TradingView interval strings. */
 const TV_INTERVAL: Record<Timeframe, string> = {
   "1m": "1",
   "5m": "5",
@@ -13,9 +12,6 @@ const TV_INTERVAL: Record<Timeframe, string> = {
   "1d": "D",
 };
 
-/**
- * Match the OKX USDT perpetual used by Market Data Hub.
- */
 function toTvSymbol(symbol: string): string {
   const clean = symbol.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
   return `OKX:${clean}.P`;
@@ -25,7 +21,6 @@ type TradingViewWidgetProps = {
   symbol: string;
   timeframe: Timeframe;
   theme?: "light" | "dark";
-  /** Optional height in px; mobile should stay moderate to avoid fighting bottom nav. */
   height?: number;
 };
 
@@ -62,12 +57,6 @@ function loadTradingViewScript(): Promise<void> {
   return tvScriptPromise;
 }
 
-/**
- * Thin TradingView Advanced Chart embed.
- * - No custom datafeed / Charting Library.
- * - No auto-drawn entry/stop/TP lines (user copies numbers from the plan card).
- * - symbol + interval driven by parent (setup / toolbar).
- */
 export default function TradingViewWidget({
   symbol,
   timeframe,
@@ -96,7 +85,6 @@ export default function TradingViewWidget({
       }
       if (cancelled || !container || !window.TradingView) return;
 
-      // Clear previous widget DOM
       container.innerHTML = "";
       const host = document.createElement("div");
       host.id = containerId;
@@ -113,7 +101,9 @@ export default function TradingViewWidget({
           theme: theme === "light" ? "light" : "dark",
           style: "1",
           locale: "zh_TW",
-          toolbar_bg: theme === "light" ? "#f4f5f0" : "#0c100c",
+          toolbar_bg: theme === "light" ? "#EEEAE0" : "#172B24",
+          backgroundColor: theme === "light" ? "#F7F5EF" : "#172B24",
+          gridColor: theme === "light" ? "rgba(104, 115, 109, 0.09)" : "rgba(165, 176, 168, 0.10)",
           enable_publishing: false,
           hide_top_toolbar: false,
           hide_legend: false,

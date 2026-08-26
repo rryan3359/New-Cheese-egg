@@ -69,7 +69,6 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated,
       writeStored(storageKeys.data, next);
       setLoadStage(stageFromPipeline(next));
 
-      // Alert evaluation uses the same merged snapshot, but never blocks market rendering.
       void evaluateCurrentAlerts(next).catch(() => undefined);
       return next;
     },
@@ -124,8 +123,6 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated,
   }, []);
 
   const refresh = useCallback(async () => {
-    // Initial and user-triggered refreshes should always be allowed to start.
-    // Visibility checks at the scheduling sites pause only automatic refreshes.
     if (refreshingRef.current) return;
 
     const currentRequest = ++requestIdRef.current;

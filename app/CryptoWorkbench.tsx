@@ -27,8 +27,8 @@ type ViewId = "cockpit" | "scanner" | "derivatives" | "strategy" | "chart" | "al
 type ThemeMode = "light" | "dark";
 
 const navigation = [
-  { id: "cockpit", number: "01", label: "交易總攬", eyebrow: "TODAY'S QUANT DESK" },
-  { id: "scanner", number: "02", label: "機會掃描", eyebrow: "OPPORTUNITY SCANNER" },
+  { id: "cockpit", number: "01", label: "交易總攬", eyebrow: "TRADING OVERVIEW" },
+  { id: "scanner", number: "02", label: "機會掃描器", eyebrow: "OPPORTUNITY SCANNER" },
   { id: "derivatives", number: "03", label: "衍生品", eyebrow: "DERIVATIVES" },
   { id: "strategy", number: "04", label: "策略工作台", eyebrow: "STRATEGY DESK" },
   { id: "chart", number: "05", label: "圖表決策", eyebrow: "CHART WORKSPACE" },
@@ -133,7 +133,6 @@ export default function CryptoWorkbench() {
       setHydrated(true);
     });
 
-    // Market data starts immediately and never waits for user-data / D1 discovery.
     void refresh();
 
     const controller = new AbortController();
@@ -215,7 +214,7 @@ export default function CryptoWorkbench() {
     return "live";
   }, [data, error]);
 
-  const activeLabel = navigation.find((item) => item.id === activeView)?.label ?? "今日作戰台";
+  const activeLabel = navigation.find((item) => item.id === activeView)?.label ?? "交易總攬";
   const updatedAt = data ? new Date(data.updatedAt).toLocaleTimeString("zh-TW", { hour12: false }) : "—";
   const warningCount = data?.health.filter((provider) => provider.state === "missing" || provider.state === "stale").length ?? (error ? 1 : 0);
   const triggeredCount = alerts.filter((alert) => alert.currentStatus === "triggered").length;
@@ -281,7 +280,7 @@ export default function CryptoWorkbench() {
           />
         ) : marketUnavailable("圖表決策");
       default:
-        return data ? <CockpitView data={data} watchlist={settings.watchlist} onNavigate={navigate} onOpenChart={openChart} onCreateAlert={createSetupAlert} onToggleWatchlist={toggleWatchlist} /> : marketUnavailable("市場駕駛艙");
+        return data ? <CockpitView data={data} watchlist={settings.watchlist} onNavigate={navigate} onOpenChart={openChart} onCreateAlert={createSetupAlert} onToggleWatchlist={toggleWatchlist} /> : marketUnavailable("交易總攬");
     }
   };
 
@@ -308,7 +307,7 @@ export default function CryptoWorkbench() {
       <section className="workbench-main">
         <Topbar
           activeLabel={activeLabel}
-          persistenceLabel={persistence === "d1" ? "私人同步" : ""}
+          persistenceLabel={persistence === "d1" ? "私人同步" : "此裝置"}
           updatedAt={updatedAt}
           theme={theme}
           refreshing={refreshing}

@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import { writeStored } from "./storage";
 
-/** Debounce localStorage writes to reduce main-thread pressure. */
 export function useDebouncedPersist(key: string, value: unknown, hydrated: boolean, delayMs = 400) {
   const first = useRef(true);
   useEffect(() => {

@@ -15,19 +15,12 @@ type DataBannersProps = {
   onDismissToast: (id: string) => void;
   onRefresh: () => void;
   onNavigate: (view: string) => void;
-  /** When true, hide the expandable detail panel permanently (local preference) */
   hideStatusDetails?: boolean;
   onHideStatusDetails?: () => void;
   statusOpen?: boolean;
   onToggleStatus?: () => void;
 };
 
-/**
- * Compact status is rendered in Topbar; this component only shows:
- * - alert toasts
- * - transient error retry (when we still have data)
- * - optional expandable detail panel (if user opened the badge and hasn't dismissed forever)
- */
 export function DataBanners({
   loadStage,
   healthTone,

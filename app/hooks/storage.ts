@@ -33,6 +33,6 @@ export function writeStored(key: string, value: unknown) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Quota or private mode — ignore; in-memory state remains valid.
+    void 0;
   }
 }

@@ -19,7 +19,6 @@ export function PriceTicker({ data, loading, error, onSelect }: PriceTickerProps
     );
   }
 
-  // Duplicate list for seamless marquee
   const items = [...data.assets, ...data.assets];
 
   return (

@@ -281,7 +281,6 @@ button.scanner-row:hover { background: #1d231a; }
 .chart-panel, .checklist-panel { padding: 16px; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; color: var(--muted); font: 600 10px var(--font-geist-mono), monospace; }
 .chart-legend .lime { color: var(--lime); }
-/* .terminal-chart removed with Canvas chart */
 .rr-strip { display: flex; height: 26px; margin-top: 8px; border-radius: 6px; overflow: hidden; color: #0b0e0b; font: 800 10px var(--font-geist-mono), monospace; }
 .rr-strip span { display: grid; place-items: center; }
 .risk-zone { background: var(--red); }
@@ -394,7 +393,6 @@ button.scanner-row:hover { background: #1d231a; }
 @media (max-width: 760px) {
   .crypto-workbench { display: block; }
   .workbench-sidebar { display: none; }
-  /* Floating frosted-glass bottom tab bar */
   .mobile-bottom-nav {
     position: fixed;
     z-index: 50;
@@ -608,7 +606,6 @@ button.scanner-row:hover { background: #1d231a; }
   .range-filter { grid-column: 1 / -1; }
   .form-grid, .form-grid.two-column, .journal-fields { grid-template-columns: repeat(2,1fr); }
   .formula-note > div:last-child { grid-template-columns: repeat(2,1fr); }
-  /* .terminal-chart removed with Canvas chart */
   .checklist { grid-template-columns: 1fr 1fr; }
   .data-banner { grid-template-columns: auto 1fr; }
   .data-banner button { grid-column: 2; justify-self: start; padding: 0; }
@@ -626,7 +623,6 @@ button.scanner-row:hover { background: #1d231a; }
   .chart-toolbar { align-items: start; }
   .chart-toolbar > div { flex-wrap: wrap; }
   .chart-toolbar > div:last-child .metric-state { display: none; }
-  /* .terminal-chart removed with Canvas chart */
   .alert-list > div { grid-template-columns: auto .7fr 1.2fr auto; }
   .alert-list em, .alert-list small { display: none; }
   .journal-table > div { min-width: 630px; }
@@ -636,7 +632,6 @@ button.scanner-row:hover { background: #1d231a; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
-/* Decision-engine v2 additions */
 .metric-state.eligible, .metric-state.triggered { color: #c9e14d; background: rgba(175,202,63,.13); border-color: rgba(175,202,63,.35); }
 .metric-state.waiting, .metric-state.cooldown { color: #e7ae60; background: rgba(231,174,96,.1); border-color: rgba(231,174,96,.3); }
 .metric-state.invalid, .metric-state.disabled { color: #8a9186; background: rgba(138,145,134,.08); border-color: rgba(138,145,134,.22); }
@@ -696,7 +691,6 @@ button.scanner-row:hover { background: #1d231a; }
   .alert-toasts { top: 63px; right: 12px; }
 }
 
-/* First-edition editorial theme */
 .crypto-workbench::before, .crypto-workbench::after { content: ""; position: fixed; z-index: 0; pointer-events: none; }
 .crypto-workbench::before { width: 430px; height: 430px; top: -220px; right: -90px; border-radius: 52% 48% 44% 56%; background: var(--lime); opacity: .055; transform: rotate(17deg); }
 .crypto-workbench::after { width: 180px; height: 180px; left: 210px; bottom: -95px; border: 1px solid color-mix(in srgb, var(--text) 14%, transparent); border-radius: 50%; }
@@ -787,7 +781,6 @@ html[data-theme="light"] .quiet-state p, html[data-theme="light"] .risk-list li,
 html[data-theme="light"] input, html[data-theme="light"] select, html[data-theme="light"] textarea { color: var(--text); background: #fffdf7; }
 html[data-theme="light"] .scanner-table { background: rgba(255,253,247,.96); box-shadow: 0 12px 34px rgba(30,36,29,.06); }
 html[data-theme="light"] .scanner-head { background: #f3efe3; }
-html[data-theme="light"] /* .terminal-chart removed with Canvas chart */
 html[data-theme="light"] .liquidation-note, html[data-theme="light"] .security-note { color: #8b582f; background: #fff6ea; border-color: #e7c39d; }
 html[data-theme="light"] .direction.long { color: #526815; border-color: #cad58d; background: #f1f6d1; }
 html[data-theme="light"] .direction.short { color: #a13e2d; border-color: #efc0b4; background: #fff2ee; }
@@ -796,7 +789,6 @@ html[data-theme="light"] .watchlist-settings button.selected { color: var(--text
 html[data-theme="light"] .alert-toasts button { color: var(--text); background: #f7f9dc; border-color: #b7c45c; box-shadow: 0 12px 35px rgba(30,36,29,.15); }
 html[data-theme="light"] .alert-toasts b { color: #526815; }
 html[data-theme="light"] .alert-toasts span { color: var(--muted); }
-/* Dark theme floating glass (default) */
 html:not([data-theme="light"]) .mobile-bottom-nav__inner {
   background: rgba(22, 26, 22, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -868,7 +860,6 @@ html[data-theme="light"] .mobile-more-menu > button {
 }
 
 
-/* ── Status badge (replaces full-width banners) ── */
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -912,7 +903,6 @@ html[data-theme="light"] .status-badge.open {
   border-color: #c5d07a;
 }
 
-/* Expandable status detail (only when badge clicked) */
 .status-detail-panel {
   margin: 0 0 12px;
   padding: 12px 14px;
@@ -961,7 +951,6 @@ html[data-theme="light"] .status-detail-panel {
   background: rgba(255, 253, 247, 0.95);
 }
 
-/* ── Price ticker marquee ── */
 .price-ticker {
   overflow: hidden;
   border-bottom: 1px solid var(--line);
@@ -1021,11 +1010,9 @@ html[data-theme="light"] .price-ticker {
 html[data-theme="light"] .ticker-item.positive em { color: #5a7a18; }
 html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
 
-/* Hide legacy full-width load-stage if any residual */
 .load-stage { display: none !important; }
 .persistence-banner { display: none !important; }
 
-/* —— 正式改動：長列表內滾、約 10 列可视 —— */
 .scanner-table {
   max-height: calc(10 * 52px + 44px);
   overflow-y: auto;
@@ -1047,7 +1034,6 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
   overflow-x: hidden;
 }
 
-/* 績效拆解：防止文字溢出小卡 */
 .breakdown-grid > div {
   min-width: 0;
   overflow: hidden;
@@ -1068,14 +1054,11 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
   white-space: nowrap;
 }
 
-/* 頂欄狀態徽章已移除，殘留樣式不佔位 */
 .status-badge { display: none !important; }
 .watchlist-priority { display: none !important; }
 
-/* ── Decision view: TradingView (main) + Trade Plan (side) ── */
 .decision-layout {
   display: grid;
-  /* TV first (larger), plan card second */
   grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   gap: 14px;
   align-items: start;
@@ -1137,7 +1120,6 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
     position: static;
     max-height: none;
   }
-  /* 手機：上圖下卡 */
   .decision-tv-panel .tv-widget-container {
     min-height: 380px;
   }
@@ -1145,7 +1127,7 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
 
 @media (max-width: 640px) {
   .decision-view {
-    margin-bottom: 72px; /* bottom MobileNav */
+    margin-bottom: 72px;
   }
   .decision-tv-panel .tv-widget-container {
     min-height: 340px;
@@ -1153,11 +1135,8 @@ html[data-theme="light"] .ticker-item.negative em { color: #c44a36; }
 }
 
 
-/* TerminalChart / Canvas decision chart removed — keep class inert if stale HTML */
-/* .terminal-chart removed with Canvas chart */
 .layer-toggles { display: none !important; }
 
-/* ── v12 reliability, mobile density and accessibility fixes ── */
 html, body { max-width: 100%; overflow-x: hidden; }
 .crypto-workbench, .workbench-main, .workbench-content, .view-stack { min-width: 0; max-width: 100%; }
 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
@@ -1273,8 +1252,6 @@ html[data-theme="light"] .ticker-stale-label { color: var(--orange-deep); backgr
 }
 
 @media (max-width: 480px) {
-  /* Mobile browsers use overlay scrollbars; hide the reserved desktop-emulation
-     gutter so 390px/430px responsive captures and layouts use the full width. */
   html { scrollbar-width: none; }
   html::-webkit-scrollbar { width: 0; height: 0; }
   .workbench-content { overflow: clip; padding-right: 12px; padding-left: 12px; }
@@ -1361,7 +1338,6 @@ html[data-theme="light"] .ticker-stale-label { color: var(--orange-deep); backgr
   .ticker-track { animation: none !important; transform: none !important; }
 }
 
-/* v13 · intraday quant command center */
 .command-hero { align-items: center; padding: 12px 0 5px; }
 .command-hero > div > span { display: block; max-width: 720px; margin-top: 12px; color: var(--muted); font-size: 13px; line-height: 1.65; }
 .today-status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }

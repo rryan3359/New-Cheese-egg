@@ -84,7 +84,6 @@ export function usePersistence(): UsePersistenceResult {
       const response = await fetch("/api/user-data", { cache: "no-store", signal });
       const payload = (await response.json()) as UserDataPayload & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? `同步服務 ${response.status}`);
-      // Vercel / 無 D1：API 會回 persistence: "device"
       if (payload.persistence !== "d1") {
         setPersistence("device");
         persistenceRef.current = "device";
