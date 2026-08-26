@@ -85,12 +85,18 @@ test("no strategy marked executable can bypass the 2R net threshold", () => {
   }
 });
 
-test("session clock uses IANA timezone and handles New York daylight saving", () => {
-  const summer = currentSession(new Date("2026-07-15T14:00:00Z"));
-  const winter = currentSession(new Date("2026-01-15T15:00:00Z"));
-  assert.equal(summer.timezone, "America/New_York");
-  assert.equal(summer.closesAt, "2026-07-15T21:00:00.000Z");
-  assert.equal(winter.closesAt, "2026-01-15T22:00:00.000Z");
+test("session clock uses the five New York windows and handles daylight saving", () => {
+  assert.equal(currentSession(new Date("2026-07-16T00:30:00Z")).label, "亞盤");
+  assert.equal(currentSession(new Date("2026-07-15T06:30:00Z")).label, "倫敦盤");
+  const summer = currentSession(new Date("2026-07-15T13:45:00Z"));
+  const winter = currentSession(new Date("2026-01-15T14:45:00Z"));
+  assert.equal(summer.label, "美盤早盤");
+  assert.equal(summer.opensAt, "2026-07-15T13:30:00.000Z");
+  assert.equal(summer.closesAt, "2026-07-15T14:45:00.000Z");
+  assert.equal(winter.opensAt, "2026-01-15T14:30:00.000Z");
+  assert.equal(winter.closesAt, "2026-01-15T15:45:00.000Z");
+  assert.equal(currentSession(new Date("2026-07-15T16:15:00Z")).label, "美盤午盤");
+  assert.equal(currentSession(new Date("2026-07-15T18:00:00Z")).label, "美盤午後");
 });
 
 test("PDH PDL and session levels come from candles and never default to zero", () => {

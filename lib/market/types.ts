@@ -145,7 +145,7 @@ export type MarketEvent = {
 };
 
 export type SessionContext = {
-  name: "Asia" | "London" | "New York" | "Off-session";
+  name: "Asia" | "London" | "New York AM" | "New York Midday" | "New York PM" | "Off-session";
   label: string;
   timezone: string;
   localTime: string;

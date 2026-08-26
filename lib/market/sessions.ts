@@ -27,14 +27,14 @@ function zonedParts(date: Date, timeZone: string): ZonedParts {
 }
 
 /** Convert an IANA-zone wall clock to UTC without a third-party timezone database. */
-function zonedToUtc(year: number, month: number, day: number, hour: number, timeZone: string) {
-  const guess = Date.UTC(year, month - 1, day, hour);
+function zonedToUtc(year: number, month: number, day: number, hour: number, timeZone: string, minute = 0) {
+  const guess = Date.UTC(year, month - 1, day, hour, minute);
   const observed = zonedParts(new Date(guess), timeZone);
   const observedAsUtc = Date.UTC(observed.year, observed.month - 1, observed.day, observed.hour, observed.minute);
   let resolved = guess - (observedAsUtc - guess);
   const second = zonedParts(new Date(resolved), timeZone);
   const secondAsUtc = Date.UTC(second.year, second.month - 1, second.day, second.hour, second.minute);
-  resolved -= secondAsUtc - Date.UTC(year, month - 1, day, hour);
+  resolved -= secondAsUtc - Date.UTC(year, month - 1, day, hour, minute);
   return resolved;
 }
 
@@ -43,26 +43,35 @@ function shiftLocalDate(parts: ZonedParts, days: number) {
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
 }
 
-type SessionDefinition = { name: SessionContext["name"]; label: string; timezone: string; openHour: number; closeHour: number };
+type SessionDefinition = { name: SessionContext["name"]; label: string; timezone: string; openHour: number; closeHour: number; openMinute?: number; closeMinute?: number };
 const SESSIONS: SessionDefinition[] = [
   { name: "Asia", label: "亞洲盤", timezone: "UTC", openHour: 0, closeHour: 8 },
   { name: "London", label: "倫敦盤", timezone: "Europe/London", openHour: 8, closeHour: 16 },
-  { name: "New York", label: "紐約盤", timezone: "America/New_York", openHour: 8, closeHour: 17 },
+  { name: "New York AM", label: "紐約盤", timezone: "America/New_York", openHour: 8, closeHour: 17 },
+];
+const TRADING_WINDOWS: SessionDefinition[] = [
+  { name: "Asia", label: "亞盤", timezone: "America/New_York", openHour: 20, closeHour: 23, closeMinute: 45 },
+  { name: "London", label: "倫敦盤", timezone: "America/New_York", openHour: 2, closeHour: 4, closeMinute: 45 },
+  { name: "New York AM", label: "美盤早盤", timezone: "America/New_York", openHour: 9, openMinute: 30, closeHour: 10, closeMinute: 45 },
+  { name: "New York Midday", label: "美盤午盤", timezone: "America/New_York", openHour: 12, closeHour: 12, closeMinute: 45 },
+  { name: "New York PM", label: "美盤午後", timezone: "America/New_York", openHour: 13, openMinute: 30, closeHour: 15, closeMinute: 45 },
 ];
 
 export function currentSession(now = new Date()): SessionContext {
-  // Prefer the later liquidity window during overlaps.
-  const active = [...SESSIONS].reverse().find((session) => {
+  const active = TRADING_WINDOWS.find((session) => {
     const local = zonedParts(now, session.timezone);
-    return local.hour >= session.openHour && local.hour < session.closeHour;
+    const currentMinute = local.hour * 60 + local.minute;
+    const opensAtMinute = session.openHour * 60 + (session.openMinute ?? 0);
+    const closesAtMinute = session.closeHour * 60 + (session.closeMinute ?? 0);
+    return currentMinute >= opensAtMinute && currentMinute < closesAtMinute;
   });
   if (!active) {
     const utc = zonedParts(now, "UTC");
     return { name: "Off-session", label: "主要時段外", timezone: "UTC", localTime: `${String(utc.hour).padStart(2, "0")}:${String(utc.minute).padStart(2, "0")} UTC`, opensAt: null, closesAt: null };
   }
   const local = zonedParts(now, active.timezone);
-  const opensAt = zonedToUtc(local.year, local.month, local.day, active.openHour, active.timezone);
-  const closesAt = zonedToUtc(local.year, local.month, local.day, active.closeHour, active.timezone);
+  const opensAt = zonedToUtc(local.year, local.month, local.day, active.openHour, active.timezone, active.openMinute);
+  const closesAt = zonedToUtc(local.year, local.month, local.day, active.closeHour, active.timezone, active.closeMinute);
   return {
     name: active.name,
     label: active.label,
