@@ -101,7 +101,7 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
   const actions = { onOpenChart, onCreateAlert, onToggleWatchlist };
   return <div className="view-stack command-center">
     <section className="cockpit-heading view-heading command-hero">
-      <div><p>TODAY&apos;S QUANT DESK</p><h1>今日作戰台<br /><i>{noTrade ? "目前不適合交易。" : "只做結構與空間都足夠的機會。"}</i></h1><span>{noTrade ? "等待也是交易決策。沒有達到淨 RR 1.5 的真實目標，就不進機會榜。" : `目前 ${opportunities.length} 個機會通過淨 RR 1.5 初篩；只有條件完整且 ≥2R 才可執行。`}</span></div>
+      <div><p>TODAY&apos;S QUANT DESK</p><h1>交易總攬<br /><i>{noTrade ? "目前不適合交易。" : "只做結構與空間都足夠的機會。"}</i></h1><span>{noTrade ? "等待也是交易決策。沒有達到淨 RR 1.5 的真實目標，就不進機會榜。" : `目前 ${opportunities.length} 個機會通過淨 RR 1.5 初篩；只有條件完整且 ≥2R 才可執行。`}</span></div>
       <button type="button" onClick={() => onNavigate("scanner")}>開啟完整掃描器 <span>↗</span></button>
     </section>
 
@@ -109,7 +109,7 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
       <article className={`today-regime ${noTrade ? "no-trade" : ""}`}><span>今日市場狀態</span><strong>{regimeLabels[data.regime] ?? data.regime}</strong><p>{data.breadth.total ? `${data.breadth.advancing}/${data.breadth.total} 檔上漲` : "Breadth N/A"} · {data.pipeline.stage === "showing-stale" ? "稍早資料" : "OKX 即時"}</p></article>
       <article><span>當前交易時段</span><strong>{data.session.label}</strong><p>{data.session.localTime}<br />{data.session.closesAt ? `結束 ${new Date(data.session.closesAt).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", timeZone: data.session.timezone })} ${data.session.timezone}` : "等待下一個主要時段"}</p></article>
       <article><span>衍生品背景</span><strong>{data.riskAlerts.length ? `${data.riskAlerts.length} 項異常` : "未見明顯異常"}</strong><p>Funding／OI／Positioning 只確認背景，不單獨給方向。</p></article>
-      <article><span>決策門檻</span><strong>1.5R 觀察 · 2R 執行</strong><p>淨值已扣雙邊手續費與滑價，不人工拉遠目標。</p></article>
+      <article><span>決策門檻</span><strong>WATCH</strong><p>淨值已扣雙邊手續費與滑價，不人工拉遠目標。</p></article>
     </section>
 
     <section className="command-split">
@@ -121,7 +121,7 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
       </article>
     </section>
 
-    <section className="terminal-panel strategy-status-board"><div className="panel-heading"><div><p>THREE PLAYBOOKS</p><h2>三套策略現在適合嗎</h2></div><span>其餘四套已停止產生新訊號</span></div>
+    <section className="terminal-panel strategy-status-board"><div className="panel-heading"><div><p>THREE PLAYBOOKS</p><h2>三套策略現在適合嗎</h2></div><span></span></div>
       <div>{strategyStates.map(({ name, best }, index) => <article key={name}><header><b>0{index + 1} · {strategyLabels[name]}</b>{best ? <StatePill state={best.status} /> : <StatePill state="missing" />}</header><p>{best ? `${best.symbol.replace("USDT", "")} · ${best.timeframe} · ${directionLabels[best.direction]}` : "資料不足"}</p><small>{best?.missingConditions[0] ?? best?.reasons[0] ?? strategyTips[name]}</small></article>)}</div>
     </section>
 
