@@ -107,8 +107,8 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
     <section className="today-status-grid">
       <article className={`today-regime ${noTrade ? "no-trade" : ""}`}><span>今日市場狀態</span><strong>{regimeLabels[data.regime] ?? data.regime}</strong><p>{data.breadth.total ? `${data.breadth.advancing}/${data.breadth.total} 檔上漲` : "Breadth N/A"} · {data.pipeline.stage === "showing-stale" ? "稍早資料" : "OKX 即時"}</p></article>
       <article><span>當前交易時段</span><strong>{data.session.label}</strong><p>{data.session.localTime}<br />{data.session.closesAt ? `結束 ${new Date(data.session.closesAt).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", timeZone: data.session.timezone })} ${data.session.timezone}` : "等待下一個主要時段"}</p></article>
-      <article><span>衍生品背景</span><strong>{data.riskAlerts.length ? `${data.riskAlerts.length} 項異常` : "未見明顯異常"}</strong><p>Funding／OI／Positioning 只確認背景，不單獨給方向。</p></article>
-      <article><span>決策門檻</span><strong>1.5R 觀察 · 2R 執行</strong><p>淨值已扣雙邊手續費與滑價，不人工拉遠目標。</p></article>
+      <article><span>衍生品背景</span><strong>{data.riskAlerts.length ? `${data.riskAlerts.length} 項異常` : "未見明顯異常"}</strong><p></p></article>
+      <article><span>決策門檻</span><strong>WATCH</strong><p></p></article>
     </section>
 
     <section className="command-split">
@@ -120,7 +120,7 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
       </article>
     </section>
 
-    <section className="terminal-panel opportunity-panel-v13"><div className="panel-heading"><div><p>BEST OPPORTUNITIES</p><h2>最佳機會 · 最多 5 個</h2></div></div>
+    <section className="terminal-panel opportunity-panel-v13"><div className="panel-heading"><div><p>BEST OPPORTUNITIES</p><h2>最佳機會 </h2></div></div>
       <div className="opportunity-grid-v13">{opportunities.length ? opportunities.map((setup) => <OpportunityCard key={setup.id} setup={setup} watchlist={watchlist} actions={actions} />) : <div className="no-trade-decision"><b>等待也是交易決策</b><p>目前沒有策略同時具備真實結構空間與至少 1.5 的淨 RR。不要為了交易而交易。</p></div>}</div>
     </section>
 
@@ -158,7 +158,7 @@ export function DerivativesView({ data }: { data: MarketHubPayload }) {
   const withFunding = data.assets.filter((asset) => asset.funding.value !== null);
   const withOi = data.assets.filter((asset) => asset.oiChange1h.value !== null);
   const withPositioning = data.assets.filter((asset) => asset.positioning.value !== null);
-  return <div className="view-stack"><ViewTitle eyebrow="DERIVATIVES" title="衍生品只做背景，不做第四套策略。" copy="OKX Funding、OI、全體／大戶帳戶比與 Positioning 不會單獨產生方向；缺值保留 N/A。" />
+  return <div className="view-stack"><ViewTitle eyebrow="DERIVATIVES" title="衍生品只做背景。" copy="OKX Funding、OI、全體／大戶帳戶比與 Positioning 不會單獨產生方向；缺值保留 N/A。" />
     <section className="derivative-summary"><article><span>Funding 異常</span><b>{withFunding.length ? withFunding.filter((asset) => Math.abs(asset.funding.value!) >= 0.0005).length : "—"}</b><small>絕對值 ≥ 0.05%</small></article><article><span>OI 1h 增加</span><b>{withOi.length ? withOi.filter((asset) => asset.oiChange1h.value! > 0).length : "—"}</b><small>樣本 {withOi.length}</small></article><article><span>帳戶傾向極端</span><b>{withPositioning.length ? withPositioning.filter((asset) => Math.abs(asset.positioning.value!) >= 60).length : "—"}</b><small>非真實持倉集中度</small></article></section>
     <section className="position-table"><div className="position-row position-head"><span>幣種</span><span>Funding</span><span>未平倉量</span><span>OI 1h</span><span>全體多空比</span><span>大戶多空比</span><span>傾向分數</span></div>{data.assets.map((asset) => <div className="position-row" key={asset.symbol}><b data-label="幣種">{asset.symbol.replace("USDT", "")}</b><span data-label="Funding">{asset.funding.value === null ? "N/A" : `${(asset.funding.value * 100).toFixed(4)}%`}</span><span data-label="未平倉量">{compact(asset.openInterest.value)}</span><span data-label="OI 1h" className={tone(asset.oiChange1h.value)}>{formatPercent(asset.oiChange1h.value)}</span><span data-label="全體多空比">{asset.globalRatio.value?.toFixed(2) ?? "N/A"}</span><span data-label="大戶多空比">{asset.topRatio.value?.toFixed(2) ?? "N/A"}</span><span data-label="傾向分數" className={tone(asset.positioning.value)}>{asset.positioning.value?.toFixed(1) ?? "N/A"}</span></div>)}</section>
   </div>;
