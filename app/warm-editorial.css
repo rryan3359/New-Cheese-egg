@@ -1062,3 +1062,13 @@ html:not([data-theme="light"]) .mobile-more-menu > button {
   .no-trade-decision { padding: 30px 17px; }
   .no-trade-decision b { font-size: 22px; }
 }
+@media (max-width: 760px) {
+  html[data-theme="light"] .mobile-brand .workbench-wordmark > span {
+    color: var(--primary);
+  }
+
+  html[data-theme="light"] .mobile-brand .workbench-emblem::after {
+    background: var(--surface);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 25%, transparent);
+  }
+}
