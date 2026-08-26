@@ -307,7 +307,7 @@ export default function CryptoWorkbench() {
       <section className="workbench-main">
         <Topbar
           activeLabel={activeLabel}
-          persistenceLabel={persistence === "d1" ? "私人同步" : ""}
+          persistenceLabel={persistence === "d1" ? "私人同步" : "此裝置"}
           updatedAt={updatedAt}
           theme={theme}
           refreshing={refreshing}
