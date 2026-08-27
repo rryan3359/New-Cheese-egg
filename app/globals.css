@@ -1349,11 +1349,23 @@ html[data-theme="light"] .ticker-stale-label { color: var(--orange-deep); backgr
 .today-status-grid .today-regime strong { color: var(--orange-light); }
 .today-status-grid .today-regime.no-trade { border-color: var(--line); background: var(--panel); }
 .today-status-grid .today-regime.no-trade strong { color: var(--muted); }
+.today-status-grid .asset-quote-card { position: relative; overflow: hidden; }
+.today-status-grid .asset-quote-card::after { content: ""; position: absolute; width: 82px; height: 82px; right: -30px; bottom: -34px; border: 1px solid color-mix(in srgb, var(--orange) 28%, transparent); border-radius: 50%; pointer-events: none; }
+.today-status-grid .asset-quote-card > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 21px 0 9px; }
+.today-status-grid .asset-quote-card > div strong { margin: 0; font: 680 20px var(--font-geist-mono), monospace; letter-spacing: -.04em; }
+.today-status-grid .asset-quote-card p { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.today-status-grid .asset-quote-card p b { font: 700 11px var(--font-geist-mono), monospace; }
+.today-status-grid .asset-quote-card p small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.today-status-grid .asset-quote-card.eth::after { border-color: color-mix(in srgb, #7f8fd8 30%, transparent); }
 
 .command-split { display: grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }
 .command-split > article, .strategy-status-board, .opportunity-panel-v13 { padding: 20px; }
-.event-timeline { display: grid; gap: 7px; margin-top: 14px; }
-.event-timeline > button { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 10px 0; color: var(--text); background: transparent; border: 0; border-bottom: 1px solid var(--line-soft); text-align: left; }
+.compact-scroll-region { overflow-y: auto; overscroll-behavior: contain; scrollbar-color: color-mix(in srgb, var(--orange) 42%, transparent) transparent; scrollbar-width: thin; scroll-snap-type: y proximity; }
+.compact-scroll-region:focus-visible { outline: 2px solid var(--orange); outline-offset: 5px; border-radius: 7px; }
+.compact-scroll-region::-webkit-scrollbar { width: 5px; }
+.compact-scroll-region::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--orange) 42%, transparent); border-radius: 99px; }
+.event-timeline { display: grid; gap: 7px; max-height: 163px; margin-top: 14px; padding-right: 7px; }
+.event-timeline > button { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; min-height: 78px; padding: 10px 0; color: var(--text); background: transparent; border: 0; border-bottom: 1px solid var(--line-soft); text-align: left; scroll-snap-align: start; }
 .event-timeline > button:last-child { border-bottom: 0; }
 .event-timeline i { width: 7px; height: 7px; background: var(--dim); border-radius: 50%; }
 .event-timeline i.long { background: var(--lime); }
@@ -1362,8 +1374,8 @@ html[data-theme="light"] .ticker-stale-label { color: var(--orange-deep); backgr
 .event-timeline b { font-size: 12px; }
 .event-timeline small { color: var(--muted); font-size: 10px; line-height: 1.45; }
 .event-timeline time { color: var(--dim); font: 600 10px var(--font-geist-mono), monospace; }
-.session-level-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 15px; }
-.session-level-grid > span { display: flex; min-width: 0; flex-direction: column; gap: 5px; padding: 11px; background: color-mix(in srgb, var(--panel-soft) 78%, transparent); border: 1px solid var(--line-soft); border-radius: 10px; }
+.session-level-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 72px; margin-top: 15px; padding-right: 7px; }
+.session-level-grid > span { display: flex; min-width: 0; min-height: 72px; flex-direction: column; justify-content: center; gap: 5px; padding: 11px; background: color-mix(in srgb, var(--panel-soft) 78%, transparent); border: 1px solid var(--line-soft); border-radius: 10px; scroll-snap-align: start; }
 .session-level-grid small { overflow: hidden; color: var(--dim); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .session-level-grid b { font: 650 12px var(--font-geist-mono), monospace; }
 
@@ -1434,6 +1446,7 @@ html[data-theme="light"] .metric-state.applicable { color: #285f91; border-color
   .today-status-grid { grid-template-columns: 1fr; }
   .today-status-grid article { min-height: 126px; }
   .session-level-grid, .opportunity-levels { grid-template-columns: 1fr; }
+  .session-level-grid { max-height: 152px; }
   .event-timeline > button { grid-template-columns: 7px minmax(0, 1fr); }
   .event-timeline time { grid-column: 2; }
   .compact-market-cards { grid-template-columns: 1fr; }

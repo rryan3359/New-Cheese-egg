@@ -81,6 +81,18 @@ function SessionTimeCard({ session }: { session: MarketHubPayload["session"] }) 
   const localRange = userTimeZone ? formatSessionRange(session.opensAt, session.closesAt, userTimeZone) : "自動換算中";
   return <article><span>目前市場交易時段</span><strong>{session.label}</strong><p>市場時間 {marketRange} · {session.timezone}<br />使用者當地時間 {localRange}{userTimeZone ? ` · ${userTimeZone}` : ""}</p></article>;
 }
+
+function AssetQuoteCard({ asset, ticker }: { asset: MarketHubPayload["assets"][number] | undefined; ticker: "BTC" | "ETH" }) {
+  const price = asset?.price.value ?? null;
+  const change = asset?.change24h.value ?? null;
+  const funding = asset?.funding.value ?? null;
+  const openInterest = asset?.openInterest.value ?? null;
+  return <article className={`asset-quote-card ${ticker.toLowerCase()}`}>
+    <span>{ticker} 永續行情</span>
+    <div><strong>{formatPrice(price)}</strong><StatePill state={asset?.price.state ?? "missing"} /></div>
+    <p><b className={tone(change)}>24h {formatPercent(change)}</b><small>Funding {funding === null ? "N/A" : `${(funding * 100).toFixed(4)}%`} · OI {compact(openInterest)}</small></p>
+  </article>;
+}
 function rr(value: number | null) { return value === null ? "N/A" : `${value.toFixed(2)}R`; }
 
 function rankSetups(setups: StrategyResult[]) {
@@ -133,6 +145,9 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
   const opportunities = grouped.opportunities.slice(0, 5);
   const strategyStates = STRATEGY_NAMES.map((name) => ({ name, best: rankSetups(data.assets.flatMap((asset) => asset.strategies).filter((setup) => setup.strategy === name))[0] ?? null }));
   const primaryLevels = prioritized[0]?.sessionLevels.slice(0, 8) ?? [];
+  const cockpitEvents = data.recentEvents.filter((event) => event.kind !== "funding_anomaly" && event.kind !== "oi_anomaly").slice(0, 6);
+  const btc = data.assets.find((asset) => asset.symbol === "BTCUSDT");
+  const eth = data.assets.find((asset) => asset.symbol === "ETHUSDT");
   const noTrade = opportunities.length === 0;
   const actions = { onOpenChart, onCreateAlert, onToggleWatchlist };
   return <div className="view-stack command-center">
@@ -144,16 +159,19 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
     <section className="today-status-grid">
       <article className={`today-regime ${noTrade ? "no-trade" : ""}`}><span>今日市場狀態</span><strong>{regimeLabels[data.regime] ?? data.regime}</strong><p>{data.breadth.total ? `${data.breadth.advancing}/${data.breadth.total} 檔上漲` : "Breadth N/A"} · {data.pipeline.stage === "showing-stale" ? "稍早資料" : "OKX 即時"}</p></article>
       <SessionTimeCard session={data.session} />
-      <article><span>衍生品背景</span><strong>{data.riskAlerts.length ? `${data.riskAlerts.length} 項異常` : "未見明顯異常"}</strong><p>Funding／OI／Positioning 只確認背景，不單獨給方向。</p></article>
-      <article><span>決策門檻</span><strong>1.5R B級 · 2R A級</strong><p>兩級皆可執行；淨值已扣雙邊手續費與滑價，不人工拉遠目標。</p></article>
+      <AssetQuoteCard asset={btc} ticker="BTC" />
+      <AssetQuoteCard asset={eth} ticker="ETH" />
     </section>
 
     <section className="command-split">
       <article className="terminal-panel"><div className="panel-heading"><div><p>WHAT JUST HAPPENED</p><h2>剛剛發生什麼</h2></div></div>
-        <div className="event-timeline">{data.recentEvents.length ? data.recentEvents.slice(0, 6).map((event) => <button type="button" key={event.id} onClick={() => onOpenChart(event.symbol, event.kind === "bb_expansion" ? "15m" : "5m")}><i className={event.direction.toLowerCase()} /><span><b>{event.headline}</b><small>{event.detail}</small></span><time>{new Date(event.occurredAt).toLocaleTimeString("zh-TW", { hour12: false })}</time></button>) : <div className="inline-empty">最近已收盤 K 線沒有確認 sweep、BOS/MSS、BB 擴張或衍生品異常。</div>}</div>
+        {/* Scroll regions need keyboard focus even though they are not controls. */}
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+        <div className="event-timeline compact-scroll-region" role="region" aria-label="最近市場事件，顯示兩筆，可捲動查看更多" tabIndex={0}>{cockpitEvents.length ? cockpitEvents.map((event) => <button type="button" key={event.id} onClick={() => onOpenChart(event.symbol, event.kind === "bb_expansion" ? "15m" : "5m")}><i className={event.direction.toLowerCase()} /><span><b>{event.headline}</b><small>{event.detail}</small></span><time>{new Date(event.occurredAt).toLocaleTimeString("zh-TW", { hour12: false })}</time></button>) : <div className="inline-empty">最近已收盤 K 線沒有確認 sweep、BOS／MSS 或 BB 擴張。</div>}</div>
       </article>
       <article className="terminal-panel"><div className="panel-heading"><div><p>SESSION LEVELS</p><h2>{prioritized[0]?.symbol.replace("USDT", "") ?? "市場"} 重要價位</h2></div></div>
-        <div className="session-level-grid">{primaryLevels.length ? primaryLevels.map((level) => <span key={level.id}><small>{level.label}</small><b>{formatPrice(level.price)}</b></span>) : <div className="inline-empty">Session levels 資料不足；不補成 0。</div>}</div>
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+        <div className="session-level-grid compact-scroll-region" role="region" aria-label="重要價位，顯示兩個，可捲動查看更多" tabIndex={0}>{primaryLevels.length ? primaryLevels.map((level) => <span key={level.id}><small>{level.label}</small><b>{formatPrice(level.price)}</b></span>) : <div className="inline-empty">Session levels 資料不足；不補成 0。</div>}</div>
       </article>
     </section>
 

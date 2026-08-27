@@ -6,6 +6,7 @@
 - EMA 觸發改為重回 EMA／微型 BOS 二擇一；BB 回測改為加分；ICT／SMC 分反轉與延續，FVG／OB 二擇一，1m 只加分。
 - 固定 ATR TP 改為結構／流動性目標；淨 RR 納入實際進出價雙邊費用與滑價，1.5–<2R 為 B、≥2R 為 A。
 - 首頁改為今日作戰台，加入市場狀態、session、事件、三策略狀態、最多五個機會及 No Trade 決策。
+- 今日作戰台改以 BTC／ETH 永續行情取代衍生品背景與決策門檻，事件／重要價位只露出兩筆並可捲動；首頁事件不顯示 Funding／OI 異常。
 - TradingView 改用 OKX 永續代號；策略位仍只由 Market Data Hub 已收盤 K 線生成。
 - 同方向機會合併為 Confluence，反向衝突合併為 No Trade。
 - 新增 repeatable backtest engine、1.5R／2R 門檻比較、分組統計與樣本不足標籤。
