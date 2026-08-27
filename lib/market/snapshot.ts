@@ -15,7 +15,9 @@ const timeframeSchema = z.object({ timeframe: z.enum(["1m", "5m", "15m", "1h", "
 const strategySchema = z.object({
   id: z.string().min(1).max(200), symbol: z.string().regex(/^[A-Z0-9]{2,20}$/), timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
   strategy: z.enum(["EMA Trend", "Bollinger Breakout", "ICT / SMC"]),
-  status: z.enum(["eligible", "waiting", "applicable", "invalid", "missing"]), primaryRiskReward: z.number().finite().nullable(), updatedAt: z.string().datetime(),
+  status: z.enum(["not_applicable", "forming", "waiting_trigger", "executable", "invalidated"]),
+  dataState: z.enum(["live", "stale", "missing"]), grade: z.enum(["A", "B"]).nullable(),
+  primaryRiskReward: z.number().finite().nullable(), updatedAt: z.string().datetime(),
 }).passthrough();
 const assetSchema = z.object({
   symbol: z.string().regex(/^[A-Z0-9]{2,20}$/),

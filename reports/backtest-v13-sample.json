@@ -1,7 +1,7 @@
 {
   "dataset": "deterministic-smoke-fixture (synthetic; not evidence of profitability)",
   "report": {
-    "generatedAt": "2026-08-25T05:53:01.361Z",
+    "generatedAt": "2026-08-26T23:51:57.767Z",
     "assumptions": [
       "Signal bar and every higher-timeframe bar must be closed before evaluation; no look-ahead.",
       "Entry is eligible from the next bar only and must touch the worst entry-zone boundary within three bars.",
@@ -12,27 +12,6 @@
     "comparisons": [
       {
         "strategy": "EMA Trend",
-        "minimumNetRr": 0,
-        "metrics": {
-          "trades": 0,
-          "wins": 0,
-          "winRate": null,
-          "averageR": null,
-          "expectancy": null,
-          "profitFactor": null,
-          "maxDrawdownR": null,
-          "sampleSufficient": false,
-          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
-        },
-        "breakdown": {
-          "bySymbol": [],
-          "byTimeframe": [],
-          "bySession": [],
-          "byRegime": []
-        }
-      },
-      {
-        "strategy": "EMA Trend",
         "minimumNetRr": 1.5,
         "metrics": {
           "trades": 0,
@@ -75,86 +54,220 @@
       },
       {
         "strategy": "Bollinger Breakout",
-        "minimumNetRr": 0,
-        "metrics": {
-          "trades": 0,
-          "wins": 0,
-          "winRate": null,
-          "averageR": null,
-          "expectancy": null,
-          "profitFactor": null,
-          "maxDrawdownR": null,
-          "sampleSufficient": false,
-          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
-        },
-        "breakdown": {
-          "bySymbol": [],
-          "byTimeframe": [],
-          "bySession": [],
-          "byRegime": []
-        }
-      },
-      {
-        "strategy": "Bollinger Breakout",
         "minimumNetRr": 1.5,
         "metrics": {
-          "trades": 0,
-          "wins": 0,
-          "winRate": null,
-          "averageR": null,
-          "expectancy": null,
-          "profitFactor": null,
-          "maxDrawdownR": null,
+          "trades": 5,
+          "wins": 4,
+          "winRate": 80,
+          "averageR": 1.67286163509333,
+          "expectancy": 1.67286163509333,
+          "profitFactor": 9.36430817546665,
+          "maxDrawdownR": -1,
           "sampleSufficient": false,
-          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+          "sampleNote": "5 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
         },
         "breakdown": {
-          "bySymbol": [],
-          "byTimeframe": [],
-          "bySession": [],
-          "byRegime": []
+          "bySymbol": [
+            {
+              "key": "BTCUSDT",
+              "metrics": {
+                "trades": 5,
+                "wins": 4,
+                "winRate": 80,
+                "averageR": 1.67286163509333,
+                "expectancy": 1.67286163509333,
+                "profitFactor": 9.36430817546665,
+                "maxDrawdownR": -1,
+                "sampleSufficient": false,
+                "sampleNote": "5 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            }
+          ],
+          "byTimeframe": [
+            {
+              "key": "15m",
+              "metrics": {
+                "trades": 5,
+                "wins": 4,
+                "winRate": 80,
+                "averageR": 1.67286163509333,
+                "expectancy": 1.67286163509333,
+                "profitFactor": 9.36430817546665,
+                "maxDrawdownR": -1,
+                "sampleSufficient": false,
+                "sampleNote": "5 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            }
+          ],
+          "bySession": [
+            {
+              "key": "主要時段外",
+              "metrics": {
+                "trades": 3,
+                "wins": 2,
+                "winRate": 66.66666666666666,
+                "averageR": 1.5761359875653003,
+                "expectancy": 1.5761359875653003,
+                "profitFactor": 5.728407962695901,
+                "maxDrawdownR": -1,
+                "sampleSufficient": false,
+                "sampleNote": "3 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            },
+            {
+              "key": "亞盤",
+              "metrics": {
+                "trades": 1,
+                "wins": 1,
+                "winRate": 100,
+                "averageR": 1.7462630016889857,
+                "expectancy": 1.7462630016889857,
+                "profitFactor": null,
+                "maxDrawdownR": 0,
+                "sampleSufficient": false,
+                "sampleNote": "1 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            },
+            {
+              "key": "美盤早盤",
+              "metrics": {
+                "trades": 1,
+                "wins": 1,
+                "winRate": 100,
+                "averageR": 1.8896372110817632,
+                "expectancy": 1.8896372110817632,
+                "profitFactor": null,
+                "maxDrawdownR": 0,
+                "sampleSufficient": false,
+                "sampleNote": "1 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            }
+          ],
+          "byRegime": [
+            {
+              "key": "Compression",
+              "metrics": {
+                "trades": 3,
+                "wins": 2,
+                "winRate": 66.66666666666666,
+                "averageR": 1.3454434935851907,
+                "expectancy": 1.3454434935851907,
+                "profitFactor": 5.036330480755572,
+                "maxDrawdownR": -1,
+                "sampleSufficient": false,
+                "sampleNote": "3 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            },
+            {
+              "key": "Insufficient",
+              "metrics": {
+                "trades": 2,
+                "wins": 2,
+                "winRate": 100,
+                "averageR": 2.1639888473555393,
+                "expectancy": 2.1639888473555393,
+                "profitFactor": null,
+                "maxDrawdownR": 0,
+                "sampleSufficient": false,
+                "sampleNote": "2 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            }
+          ]
         }
       },
       {
         "strategy": "Bollinger Breakout",
         "minimumNetRr": 2,
         "metrics": {
-          "trades": 0,
-          "wins": 0,
-          "winRate": null,
-          "averageR": null,
-          "expectancy": null,
-          "profitFactor": null,
-          "maxDrawdownR": null,
+          "trades": 4,
+          "wins": 3,
+          "winRate": 75,
+          "averageR": 1.7522574540949765,
+          "expectancy": 1.7522574540949765,
+          "profitFactor": 8.009029816379906,
+          "maxDrawdownR": -1,
           "sampleSufficient": false,
-          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
+          "sampleNote": "4 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
         },
         "breakdown": {
-          "bySymbol": [],
-          "byTimeframe": [],
-          "bySession": [],
-          "byRegime": []
-        }
-      },
-      {
-        "strategy": "ICT / SMC",
-        "minimumNetRr": 0,
-        "metrics": {
-          "trades": 0,
-          "wins": 0,
-          "winRate": null,
-          "averageR": null,
-          "expectancy": null,
-          "profitFactor": null,
-          "maxDrawdownR": null,
-          "sampleSufficient": false,
-          "sampleNote": "0 筆交易；樣本不足，不得宣稱有效。"
-        },
-        "breakdown": {
-          "bySymbol": [],
-          "byTimeframe": [],
-          "bySession": [],
-          "byRegime": []
+          "bySymbol": [
+            {
+              "key": "BTCUSDT",
+              "metrics": {
+                "trades": 4,
+                "wins": 3,
+                "winRate": 75,
+                "averageR": 1.7522574540949765,
+                "expectancy": 1.7522574540949765,
+                "profitFactor": 8.009029816379906,
+                "maxDrawdownR": -1,
+                "sampleSufficient": false,
+                "sampleNote": "4 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            }
+          ],
+          "byTimeframe": [
+            {
+              "key": "15m",
+              "metrics": {
+                "trades": 4,
+                "wins": 3,
+                "winRate": 75,
+                "averageR": 1.7522574540949765,
+                "expectancy": 1.7522574540949765,
+                "profitFactor": 8.009029816379906,
+                "maxDrawdownR": -1,
+                "sampleSufficient": false,
+                "sampleNote": "4 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            }
+          ],
+          "bySession": [
+            {
+              "key": "主要時段外",
+              "metrics": {
+                "trades": 4,
+                "wins": 3,
+                "winRate": 75,
+                "averageR": 1.7522574540949765,
+                "expectancy": 1.7522574540949765,
+                "profitFactor": 8.009029816379906,
+                "maxDrawdownR": -1,
+                "sampleSufficient": false,
+                "sampleNote": "4 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            }
+          ],
+          "byRegime": [
+            {
+              "key": "Compression",
+              "metrics": {
+                "trades": 3,
+                "wins": 2,
+                "winRate": 66.66666666666666,
+                "averageR": 1.475771707785938,
+                "expectancy": 1.475771707785938,
+                "profitFactor": 5.427315123357814,
+                "maxDrawdownR": -1,
+                "sampleSufficient": false,
+                "sampleNote": "3 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            },
+            {
+              "key": "Insufficient",
+              "metrics": {
+                "trades": 1,
+                "wins": 1,
+                "winRate": 100,
+                "averageR": 2.5817146930220924,
+                "expectancy": 2.5817146930220924,
+                "profitFactor": null,
+                "maxDrawdownR": 0,
+                "sampleSufficient": false,
+                "sampleNote": "1 筆交易；少於 30 筆，樣本不足，不得宣稱有效。"
+              }
+            }
+          ]
         }
       },
       {
@@ -200,6 +313,178 @@
         }
       }
     ],
-    "trades": []
+    "trades": [
+      {
+        "symbol": "BTCUSDT",
+        "strategy": "Bollinger Breakout",
+        "timeframe": "15m",
+        "session": "亞盤",
+        "regime": "Insufficient",
+        "threshold": 1.5,
+        "signalAt": "2025-01-02T03:15:00.000Z",
+        "entryAt": "2025-01-02T03:15:00.000Z",
+        "exitAt": "2025-01-02T06:00:00.000Z",
+        "direction": "Short",
+        "entry": 107.5032611233265,
+        "stop": 108.8242961962197,
+        "target": 104.72439248104178,
+        "exit": 104.72439248104178,
+        "plannedNetRr": 1.7462630016889853,
+        "realizedR": 1.7462630016889857,
+        "outcome": "target"
+      },
+      {
+        "symbol": "BTCUSDT",
+        "strategy": "Bollinger Breakout",
+        "timeframe": "15m",
+        "session": "主要時段外",
+        "regime": "Insufficient",
+        "threshold": 1.5,
+        "signalAt": "2025-01-02T15:30:00.000Z",
+        "entryAt": "2025-01-02T15:45:00.000Z",
+        "exitAt": "2025-01-02T20:30:00.000Z",
+        "direction": "Long",
+        "entry": 102.3059293334707,
+        "stop": 101.08476462576729,
+        "target": 106.04538664914953,
+        "exit": 106.04538664914953,
+        "plannedNetRr": 2.581714693022092,
+        "realizedR": 2.5817146930220924,
+        "outcome": "target"
+      },
+      {
+        "symbol": "BTCUSDT",
+        "strategy": "Bollinger Breakout",
+        "timeframe": "15m",
+        "session": "主要時段外",
+        "regime": "Compression",
+        "threshold": 1.5,
+        "signalAt": "2025-01-03T22:45:00.000Z",
+        "entryAt": "2025-01-03T22:45:00.000Z",
+        "exitAt": "2025-01-04T05:30:00.000Z",
+        "direction": "Short",
+        "entry": 112.85392219171797,
+        "stop": 113.98689395182083,
+        "target": 108.54065314364657,
+        "exit": 108.54065314364657,
+        "plannedNetRr": 3.146693269673808,
+        "realizedR": 3.146693269673808,
+        "outcome": "target"
+      },
+      {
+        "symbol": "BTCUSDT",
+        "strategy": "Bollinger Breakout",
+        "timeframe": "15m",
+        "session": "主要時段外",
+        "regime": "Compression",
+        "threshold": 1.5,
+        "signalAt": "2025-01-04T10:30:00.000Z",
+        "entryAt": "2025-01-04T11:00:00.000Z",
+        "exitAt": "2025-01-04T11:15:00.000Z",
+        "direction": "Long",
+        "entry": 110.08336023780609,
+        "stop": 108.97651531776323,
+        "target": 113.03979889960084,
+        "exit": 108.97651531776323,
+        "plannedNetRr": 2.166723103112726,
+        "realizedR": -1,
+        "outcome": "stop"
+      },
+      {
+        "symbol": "BTCUSDT",
+        "strategy": "Bollinger Breakout",
+        "timeframe": "15m",
+        "session": "美盤早盤",
+        "regime": "Compression",
+        "threshold": 1.5,
+        "signalAt": "2025-01-04T14:00:00.000Z",
+        "entryAt": "2025-01-04T14:30:00.000Z",
+        "exitAt": "2025-01-04T17:45:00.000Z",
+        "direction": "Short",
+        "entry": 108.44392528851951,
+        "stop": 109.87638575847238,
+        "target": 105.23611370294824,
+        "exit": 105.23611370294824,
+        "plannedNetRr": 1.8896372110817634,
+        "realizedR": 1.8896372110817632,
+        "outcome": "target"
+      },
+      {
+        "symbol": "BTCUSDT",
+        "strategy": "Bollinger Breakout",
+        "timeframe": "15m",
+        "session": "主要時段外",
+        "regime": "Insufficient",
+        "threshold": 2,
+        "signalAt": "2025-01-02T15:30:00.000Z",
+        "entryAt": "2025-01-02T15:45:00.000Z",
+        "exitAt": "2025-01-02T20:30:00.000Z",
+        "direction": "Long",
+        "entry": 102.3059293334707,
+        "stop": 101.08476462576729,
+        "target": 106.04538664914953,
+        "exit": 106.04538664914953,
+        "plannedNetRr": 2.581714693022092,
+        "realizedR": 2.5817146930220924,
+        "outcome": "target"
+      },
+      {
+        "symbol": "BTCUSDT",
+        "strategy": "Bollinger Breakout",
+        "timeframe": "15m",
+        "session": "主要時段外",
+        "regime": "Compression",
+        "threshold": 2,
+        "signalAt": "2025-01-03T22:45:00.000Z",
+        "entryAt": "2025-01-03T22:45:00.000Z",
+        "exitAt": "2025-01-04T05:30:00.000Z",
+        "direction": "Short",
+        "entry": 112.85392219171797,
+        "stop": 113.98689395182083,
+        "target": 108.54065314364657,
+        "exit": 108.54065314364657,
+        "plannedNetRr": 3.146693269673808,
+        "realizedR": 3.146693269673808,
+        "outcome": "target"
+      },
+      {
+        "symbol": "BTCUSDT",
+        "strategy": "Bollinger Breakout",
+        "timeframe": "15m",
+        "session": "主要時段外",
+        "regime": "Compression",
+        "threshold": 2,
+        "signalAt": "2025-01-04T10:30:00.000Z",
+        "entryAt": "2025-01-04T11:00:00.000Z",
+        "exitAt": "2025-01-04T11:15:00.000Z",
+        "direction": "Long",
+        "entry": 110.08336023780609,
+        "stop": 108.97651531776323,
+        "target": 113.03979889960084,
+        "exit": 108.97651531776323,
+        "plannedNetRr": 2.166723103112726,
+        "realizedR": -1,
+        "outcome": "stop"
+      },
+      {
+        "symbol": "BTCUSDT",
+        "strategy": "Bollinger Breakout",
+        "timeframe": "15m",
+        "session": "主要時段外",
+        "regime": "Compression",
+        "threshold": 2,
+        "signalAt": "2025-01-04T14:15:00.000Z",
+        "entryAt": "2025-01-04T14:15:00.000Z",
+        "exitAt": "2025-01-04T17:45:00.000Z",
+        "direction": "Short",
+        "entry": 108.50865457759534,
+        "stop": 109.69404827779326,
+        "target": 105.23611370294824,
+        "exit": 105.23611370294824,
+        "plannedNetRr": 2.2806218536840053,
+        "realizedR": 2.2806218536840057,
+        "outcome": "target"
+      }
+    ]
   }
 }

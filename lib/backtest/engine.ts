@@ -4,7 +4,7 @@ import { evaluateStrategies } from "../market/strategies";
 import { DEFAULT_TRADE_COSTS, STRATEGY_NAMES, TIMEFRAMES, type Candle, type CandleMap, type StrategyName, type Timeframe, type TradeCosts } from "../market/types";
 
 export type BacktestDataset = { symbol: string; candlesByTimeframe: CandleMap };
-export type RrThreshold = 0 | 1.5 | 2;
+export type RrThreshold = 1.5 | 2;
 export type BacktestTrade = {
   symbol: string;
   strategy: StrategyName;
@@ -109,10 +109,10 @@ function simulateExit(candles: Candle[], fillIndex: number, direction: "Long" | 
 }
 
 function realizedR(direction: "Long" | "Short", entry: number, stop: number, exit: number, roundTripCostRate: number) {
-  const cost = entry * roundTripCostRate;
-  const initialRisk = Math.abs(entry - stop) + cost;
+  const oneWayCostRate = roundTripCostRate / 2;
+  const initialRisk = Math.abs(entry - stop) + (entry + stop) * oneWayCostRate;
   const gross = direction === "Long" ? exit - entry : entry - exit;
-  return initialRisk > 0 ? (gross - cost) / initialRisk : 0;
+  return initialRisk > 0 ? (gross - (entry + exit) * oneWayCostRate) / initialRisk : 0;
 }
 
 function groupMetrics(trades: BacktestTrade[], selector: (trade: BacktestTrade) => string) {
@@ -150,7 +150,7 @@ export function runBacktest(datasets: BacktestDataset[], costs: TradeCosts = DEF
     for (const strategyName of STRATEGY_NAMES) {
       const timeframe = executionTimeframe[strategyName];
       const execution = dataset.candlesByTimeframe[timeframe];
-      for (const threshold of [0, 1.5, 2] as const) {
+      for (const threshold of [1.5, 2] as const) {
         let unavailableUntil = -1;
         const warmup = strategyName === "Bollinger Breakout" ? 105 : 60;
         for (let signalIndex = warmup; signalIndex < execution.length - 2; signalIndex += 1) {
@@ -163,7 +163,7 @@ export function runBacktest(datasets: BacktestDataset[], costs: TradeCosts = DEF
           const entryHigh = setup.entryHigh;
           const stop = setup.stop;
           const plannedNetRr = setup.primaryRiskReward;
-          const ready = setup.direction !== "Neutral" && setup.conditionsMet === setup.conditionsTotal && entryLow !== null && entryHigh !== null && stop !== null && plannedNetRr !== null;
+          const ready = setup.status === "executable" && setup.direction !== "Neutral" && entryLow !== null && entryHigh !== null && stop !== null && plannedNetRr !== null;
           if (!ready || entryLow === null || entryHigh === null || stop === null || plannedNetRr === null || plannedNetRr < threshold) continue;
           const target = primaryTarget(setup);
           if (target === null) continue;
@@ -185,7 +185,7 @@ export function runBacktest(datasets: BacktestDataset[], costs: TradeCosts = DEF
       }
     }
   }
-  const comparisons = STRATEGY_NAMES.flatMap((strategy) => ([0, 1.5, 2] as const).map((minimumNetRr) => {
+  const comparisons = STRATEGY_NAMES.flatMap((strategy) => ([1.5, 2] as const).map((minimumNetRr) => {
     const rows = trades.filter((trade) => trade.strategy === strategy && trade.threshold === minimumNetRr);
     return {
       strategy, minimumNetRr, metrics: summarizeTrades(rows),

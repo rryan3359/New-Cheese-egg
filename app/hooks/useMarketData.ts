@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { markPayloadStale, mergeSnapshotsProgressive } from "../../lib/market/merge";
-import type { FetchTier, MarketHubPayload } from "../../lib/market/types";
+import { normalizeStrategyResult, type FetchTier, type MarketHubPayload } from "../../lib/market/types";
 import { parseStored, storageKeys, writeStored } from "./storage";
 
 export type LoadStage =
@@ -40,6 +40,16 @@ function marketFailureMessage(hasSnapshot: boolean) {
   return hasSnapshot
     ? "行情服務暫時不可用，已保留最後成功資料"
     : "目前沒有可用行情，請稍後重試";
+}
+
+function normalizeCachedStrategies(payload: MarketHubPayload): MarketHubPayload {
+  return {
+    ...payload,
+    assets: payload.assets.map((asset) => {
+      const strategies = asset.strategies.map(normalizeStrategyResult);
+      return { ...asset, strategies, setup: asset.setup ? normalizeStrategyResult(asset.setup) : null };
+    }),
+  };
 }
 
 export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated, feeRate, slippageRate }: UseMarketDataOptions) {
@@ -196,7 +206,8 @@ export function useMarketData({ evaluateCurrentAlerts, refreshSeconds, hydrated,
   }, []);
 
   const hydrateFromCache = useCallback(() => {
-    const cached = parseStored<MarketHubPayload | null>(storageKeys.data, null);
+    const stored = parseStored<MarketHubPayload | null>(storageKeys.data, null);
+    const cached = stored ? normalizeCachedStrategies(stored) : null;
     const cachedStoredAt = cached ? Date.parse(cached.updatedAt) : 0;
     const stale = cached?.assets?.length
       ? markPayloadStale(

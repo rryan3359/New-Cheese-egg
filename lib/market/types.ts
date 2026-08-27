@@ -54,7 +54,17 @@ export function resolveActiveStrategy(value: StrategyReference | null): Strategy
   return LEGACY_STRATEGY_MAP[value as LegacyStrategyName] ?? null;
 }
 
-export type StrategyStatus = "eligible" | "waiting" | "applicable" | "invalid" | "missing";
+export type StrategyStatus = "not_applicable" | "forming" | "waiting_trigger" | "executable" | "invalidated";
+export type LegacyStrategyStatus = "eligible" | "waiting" | "applicable" | "invalid" | "missing";
+export type StrategyGrade = "A" | "B" | null;
+export type StrategySubmodel = "Reversal" | "Continuation" | null;
+export type StrategyCondition = {
+  id: string;
+  label: string;
+  kind: "hard" | "bonus";
+  state: "met" | "failed" | "missing";
+  detail: string | null;
+};
 export type TradeCosts = { feeRate: number; slippageRate: number };
 export const DEFAULT_TRADE_COSTS: TradeCosts = { feeRate: 0.0005, slippageRate: 0.0003 };
 
@@ -63,8 +73,11 @@ export type StrategyResult = {
   symbol: string;
   timeframe: Timeframe;
   strategy: StrategyName;
+  submodel: StrategySubmodel;
   direction: "Long" | "Short" | "Neutral";
   status: StrategyStatus;
+  dataState: DataState;
+  grade: StrategyGrade;
   confidence: number;
   entryLow: number | null;
   entryHigh: number | null;
@@ -91,13 +104,51 @@ export type StrategyResult = {
   invalidation: string;
   targetBasis: string;
   reasons: string[];
+  pendingConditions: string[];
   missingConditions: string[];
+  missingData: string[];
+  hardConditions: StrategyCondition[];
+  bonusConditions: StrategyCondition[];
   requiredData: string[];
   source: string;
   updatedAt: string;
   conditionsMet: number;
   conditionsTotal: number;
+  hardConditionsMet: number;
+  hardConditionsTotal: number;
+  bonusConditionsMet: number;
+  bonusConditionsTotal: number;
 };
+
+export function normalizeStrategyStatus(value: StrategyStatus | LegacyStrategyStatus): StrategyStatus {
+  if (value === "eligible") return "executable";
+  if (value === "waiting") return "forming";
+  if (value === "applicable" || value === "missing") return "not_applicable";
+  if (value === "invalid") return "invalidated";
+  return value;
+}
+
+export function normalizeStrategyResult(strategy: StrategyResult): StrategyResult {
+  const status = normalizeStrategyStatus(strategy.status as StrategyStatus | LegacyStrategyStatus);
+  const primaryRiskReward = strategy.primaryRiskReward;
+  return {
+    ...strategy,
+    status,
+    submodel: strategy.submodel ?? null,
+    dataState: strategy.dataState ?? ((strategy.status as unknown as string) === "missing" ? "missing" : "live"),
+    grade: strategy.grade ?? (primaryRiskReward !== null && primaryRiskReward >= 2 ? "A" : primaryRiskReward !== null && primaryRiskReward >= 1.5 ? "B" : null),
+    pendingConditions: strategy.pendingConditions ?? strategy.missingConditions ?? [],
+    missingConditions: strategy.missingConditions ?? [],
+    missingData: strategy.missingData ?? [],
+    hardConditions: strategy.hardConditions ?? [],
+    bonusConditions: strategy.bonusConditions ?? [],
+    hardConditionsMet: strategy.hardConditionsMet ?? strategy.conditionsMet ?? 0,
+    hardConditionsTotal: strategy.hardConditionsTotal ?? strategy.conditionsTotal ?? 0,
+    bonusConditionsMet: strategy.bonusConditionsMet ?? 0,
+    bonusConditionsTotal: strategy.bonusConditionsTotal ?? 0,
+    eligibleForScanner: status === "executable" && primaryRiskReward !== null && primaryRiskReward >= 1.5,
+  };
+}
 
 export type TimeframeSnapshot = {
   timeframe: Timeframe;

@@ -14,7 +14,7 @@ const alertLabels: Record<AlertType, string> = {
   price_target: "價格到價", price_range: "進入價格區間", breakout: "突破近期區間", funding: "資金費率超過門檻", oi_change: "未平倉量一小時變化", positioning_reversal: "多空傾向反轉", strategy_eligible: "策略條件完成", liquidity_sweep: "掃過流動性價位", risk_reward: "報酬風險比達標", provider_health: "資料來源異常",
 };
 const alertStatusLabels: Record<string, string> = { watching: "觀察中", triggered: "已觸發", cooldown: "暫停提醒", missing: "資料不足", disabled: "已關閉" };
-const dataStateLabels: Record<string, string> = { live: "即時", stale: "稍早資料", missing: "資料不足", eligible: "可規劃", waiting: "等待", invalid: "不合", triggered: "已觸發", cooldown: "暫停提醒", disabled: "已關閉" };
+const dataStateLabels: Record<string, string> = { live: "即時", stale: "稍早資料", missing: "資料缺失", not_applicable: "不適用", forming: "形成中", waiting_trigger: "等待觸發", executable: "可執行", invalidated: "失效／過期", triggered: "已觸發", cooldown: "暫停提醒", disabled: "已關閉" };
 const channelLabels: Record<string, string> = { in_app: "站內", browser: "瀏覽器", telegram: "Telegram" };
 const deliveryLabels: Record<string, string> = { delivered: "已送達", pending: "等待中", failed: "未送達", not_configured: "尚未設定" };
 const formatSeconds = (milliseconds: number | null) => milliseconds === null ? "未使用" : `${(milliseconds / 1000).toFixed(1)} 秒`;
@@ -35,7 +35,7 @@ export function AlertsView({ data, alerts, events, watchlist, persistence, onUps
     if (!data || threshold === "" || !Number.isFinite(threshold)) return;
     const now = new Date().toISOString();
     const asset = data.assets.find((item) => item.symbol === symbol);
-    onUpsert({ id: crypto.randomUUID(), symbol, type, timeframe, strategy: ["strategy_eligible", "risk_reward"].includes(type) ? strategy : null, strategyVersion: 13, strategyLegacy: false, operator: type === "price_range" ? "inside" : operator, threshold, thresholdUpper: type === "price_range" ? thresholdUpper : null, referenceValue: type === "positioning_reversal" ? asset?.positioning.value ?? null : null, enabled: true, cooldownMinutes, dedupeKey: null, lastEvaluatedAt: null, lastTriggeredAt: null, triggerCount: 0, currentStatus: "watching", lastReason: "等待首次評估", createdAt: now });
+    onUpsert({ id: crypto.randomUUID(), symbol, type, timeframe, strategy: ["strategy_eligible", "risk_reward"].includes(type) ? strategy : null, strategyVersion: 13, strategyLegacy: false, strategyModel: null, strategyRuleset: "v13.1", operator: type === "price_range" ? "inside" : operator, threshold, thresholdUpper: type === "price_range" ? thresholdUpper : null, referenceValue: type === "positioning_reversal" ? asset?.positioning.value ?? null : null, enabled: true, cooldownMinutes, dedupeKey: null, lastEvaluatedAt: null, lastTriggeredAt: null, triggerCount: 0, currentStatus: "watching", lastReason: "等待首次評估", createdAt: now });
   };
   const enableBrowser = async () => { if ("Notification" in window) await Notification.requestPermission(); };
   return <div className="view-stack"><ViewTitle eyebrow="ALERT CENTER" title="只在條件真的完成時打擾你。" copy="頁面開啟時會跟著行情檢查；同一條件在你設定的時間內只提醒一次。" />
@@ -160,7 +160,7 @@ export function JournalView({ journal, persistence, onUpsert, onDelete }: { jour
     const actualPnl = grossPnl - draft.fees - draft.fundingCost;
     const initialRisk = Math.abs(draft.entry - draft.stop) * draft.quantity + draft.fees + draft.fundingCost;
     const rMultiple = initialRisk ? actualPnl / initialRisk : 0;
-    onUpsert({ ...draft, id: crypto.randomUUID(), strategyVersion: 13, strategyLegacy: false, actualPnl, rMultiple, createdAt: new Date().toISOString() });
+    onUpsert({ ...draft, id: crypto.randomUUID(), strategyVersion: 13, strategyLegacy: false, strategyModel: null, strategyRuleset: "v13.1", actualPnl, rMultiple, createdAt: new Date().toISOString() });
     setShowForm(false);
   };
   return <div className="view-stack"><section className="view-title with-action"><div><p>TRADING JOURNAL</p><h1>把交易變成可以改進的資料。</h1><span>{persistence === "d1" ? "交易紀錄已開啟私人同步；我們不會要求你的交易所金鑰。" : "交易紀錄會保存在這台裝置；我們不會要求你的交易所金鑰。"}</span></div><button className="primary-terminal-button" type="button" onClick={() => setShowForm(!showForm)}>新增交易 ＋</button></section>

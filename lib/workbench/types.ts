@@ -1,4 +1,4 @@
-import type { StrategyReference, Timeframe } from "../market/types";
+import type { StrategyReference, StrategySubmodel, Timeframe } from "../market/types";
 
 export type AlertType = "price_target" | "price_range" | "breakout" | "funding" | "oi_change" | "positioning_reversal" | "strategy_eligible" | "liquidity_sweep" | "risk_reward" | "provider_health";
 export type AlertStatus = "watching" | "triggered" | "cooldown" | "missing" | "disabled";
@@ -11,6 +11,8 @@ export type AlertRule = {
   strategy: StrategyReference | null;
   strategyVersion?: number;
   strategyLegacy?: boolean;
+  strategyModel?: StrategySubmodel;
+  strategyRuleset?: "v13-legacy" | "v13.1";
   operator: "above" | "below" | "inside";
   threshold: number;
   thresholdUpper: number | null;
@@ -45,6 +47,8 @@ export type JournalEntry = {
   strategy: StrategyReference;
   strategyVersion?: number;
   strategyLegacy?: boolean;
+  strategyModel?: StrategySubmodel;
+  strategyRuleset?: "v13-legacy" | "v13.1";
   timeframe: Timeframe;
   reason: string;
   entry: number;

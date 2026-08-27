@@ -113,7 +113,8 @@ export default function CryptoWorkbench() {
     const localAlerts = parseStored<AlertRule[]>(storageKeys.alerts, []);
     const localEvents = parseStored(storageKeys.alertEvents, [] as typeof alertEvents);
     const localJournal = parseStored<JournalEntry[]>(storageKeys.journal, []);
-    const localSettings = { ...defaultSettings, ...parseStored<WorkbenchSettings>(storageKeys.settings, defaultSettings) };
+    const storedSettings = parseStored<WorkbenchSettings>(storageKeys.settings, defaultSettings);
+    const localSettings = { ...defaultSettings, ...storedSettings, minimumNetRr: Math.max(1.5, storedSettings.minimumNetRr ?? 1.5) };
     const hash = window.location.hash.slice(1);
     const collapsed = parseStored<boolean>(storageKeys.sidebar, false);
     const savedTheme = localStorage.getItem(storageKeys.theme) === "dark" ? "dark" : "light";
@@ -143,7 +144,7 @@ export default function CryptoWorkbench() {
         alertsRef.current = cloud.alerts;
         setAlertEvents(cloud.alertEvents);
         setJournal(cloud.journal);
-        setSettings({ ...defaultSettings, ...cloud.settings });
+        setSettings({ ...defaultSettings, ...cloud.settings, minimumNetRr: Math.max(1.5, cloud.settings.minimumNetRr ?? 1.5) });
       }
     })();
 
@@ -183,10 +184,10 @@ export default function CryptoWorkbench() {
     const now = new Date().toISOString();
     upsertAlert({
       id: crypto.randomUUID(), symbol: setup.symbol, type: "strategy_eligible", timeframe: setup.timeframe,
-      strategy: setup.strategy, strategyVersion: 13, strategyLegacy: false, operator: "above", threshold: 2,
+      strategy: setup.strategy, strategyVersion: 13, strategyLegacy: false, strategyModel: setup.submodel, strategyRuleset: "v13.1", operator: "above", threshold: 1.5,
       thresholdUpper: null, referenceValue: null, enabled: true, cooldownMinutes: 60, dedupeKey: null,
       lastEvaluatedAt: null, lastTriggeredAt: null, triggerCount: 0, currentStatus: "watching",
-      lastReason: "等待策略條件完整且淨 RR 至少 2", createdAt: now,
+      lastReason: "等待硬條件完整且淨 RR 至少 1.5（B 級或 A 級）", createdAt: now,
     });
   };
   const upsertJournal = (entry: JournalEntry) => {

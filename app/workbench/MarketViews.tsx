@@ -4,7 +4,6 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import {
   STRATEGY_NAMES,
   TIMEFRAMES,
-  type AssetSnapshot,
   type MarketHubPayload,
   type StrategyName,
   type StrategyResult,
@@ -12,6 +11,7 @@ import {
   type Timeframe,
 } from "../../lib/market/types";
 import { cockpitAssets, prioritizeByWatchlist } from "../../lib/workbench/watchlist";
+import { groupOpportunitySetups, type OpportunityGroup } from "../../lib/workbench/opportunities";
 import TradingViewWidget from "./TradingViewWidget";
 
 export type OpenChart = (symbol: string, timeframe?: Timeframe, strategy?: StrategyName) => void;
@@ -22,9 +22,9 @@ export type OpportunityActions = {
 };
 
 export const strategyTips: Record<StrategyName, string> = {
-  "EMA Trend": "1H／4H EMA20、EMA50 與斜率先決定 Bias；15m 回踩重新站穩後，再等 5m 結構確認。",
-  "Bollinger Breakout": "BB Width 先落到歷史低百分位再擴張；收盤突破、成交量確認，並優先等回測而非追價。",
-  "ICT / SMC": "只接受 Sweep → Displacement → MSS/BOS → FVG/OB 回踩的先後順序，並以 1H／4H Bias 過濾。",
+  "EMA Trend": "1H／4H EMA 與有效斜率決定 Bias；5m／15m 回踩後，收盤站回或微型 BOS 任一成立即可，成交量與衍生品只加分。",
+  "Bollinger Breakout": "BB Width 位於近 100 根低 20% 後擴張；有效收盤突破是硬條件，成交量與回測只提高品質。",
+  "ICT / SMC": "反轉模型需要 Sweep；延續模型不強制 Sweep。兩者皆接受 FVG 或 OB 任一成立，1m 只作精細進場加分。",
 };
 export const strategyLabels: Record<StrategyName, string> = {
   "EMA Trend": "均線順勢",
@@ -32,8 +32,9 @@ export const strategyLabels: Record<StrategyName, string> = {
   "ICT / SMC": "ICT／SMC",
 };
 const stateLabels: Record<string, string> = {
-  live: "即時", stale: "稍早資料", missing: "資料不足", eligible: "可執行",
-  waiting: "形成中／觀察", applicable: "適用", invalid: "失效／淘汰",
+  live: "即時", stale: "稍早資料", missing: "資料缺失",
+  not_applicable: "不適用", forming: "形成中", waiting_trigger: "等待觸發", executable: "可執行", invalidated: "失效／過期",
+  eligible: "可執行", waiting: "形成中", applicable: "不適用", invalid: "失效／過期",
   triggered: "已觸發", cooldown: "暫停提醒", disabled: "已關閉",
 };
 const directionLabels: Record<string, string> = { Long: "偏多", Short: "偏空", Neutral: "中性" };
@@ -83,29 +84,34 @@ function SessionTimeCard({ session }: { session: MarketHubPayload["session"] }) 
 function rr(value: number | null) { return value === null ? "N/A" : `${value.toFixed(2)}R`; }
 
 function rankSetups(setups: StrategyResult[]) {
-  const rank: Record<StrategyStatus, number> = { eligible: 5, waiting: 4, applicable: 3, invalid: 2, missing: 1 };
-  return [...setups].sort((a, b) => rank[b.status] - rank[a.status] || (b.primaryRiskReward ?? -1) - (a.primaryRiskReward ?? -1) || b.confidence - a.confidence);
+  const rank: Record<StrategyStatus, number> = { executable: 5, waiting_trigger: 4, forming: 3, not_applicable: 2, invalidated: 1 };
+  return [...setups].sort((a, b) => rank[b.status] - rank[a.status] || Number(b.grade === "A") - Number(a.grade === "A") || (b.primaryRiskReward ?? -1) - (a.primaryRiskReward ?? -1) || b.confidence - a.confidence);
 }
 
-function OpportunityCard({ setup, watchlist, actions }: { setup: StrategyResult; watchlist: string[]; actions: OpportunityActions }) {
-  const missing = setup.missingConditions.slice(0, 2);
+function OpportunityCard({ opportunity, watchlist, actions }: { opportunity: OpportunityGroup; watchlist: string[]; actions: OpportunityActions }) {
+  const setup = opportunity.primary;
+  const pending = setup.pendingConditions.slice(0, 2);
+  const missing = setup.missingData.slice(0, 2);
+  const confluence = opportunity.setups.map((item) => `${strategyLabels[item.strategy]}${item.submodel ? `／${item.submodel === "Reversal" ? "反轉" : "延續"}` : ""}`);
   return <article className="opportunity-card-v13">
     <header>
       <div><span className={`direction ${setup.direction.toLowerCase()}`}>{directionLabels[setup.direction]}</span><b>{setup.symbol.replace("USDT", "")} · {setup.timeframe}</b></div>
-      <StatePill state={setup.status} />
+      <div className="opportunity-badges"><StatePill state={setup.status} />{setup.grade && <b className={`grade-badge grade-${setup.grade.toLowerCase()}`}>{setup.grade}級</b>}</div>
     </header>
-    <h3>{strategyLabels[setup.strategy]}</h3>
+    <h3>{confluence.join(" × ")}</h3>
+    {opportunity.setups.length > 1 && <p className="confluence-note">Confluence · {opportunity.setups.length} 套策略同向成立，已合併為一個機會</p>}
     <p className="opportunity-reason">{setup.reasons.slice(0, 2).join(" · ") || setup.trigger}</p>
-    {missing.length > 0 && <p className="opportunity-missing"><b>仍缺：</b>{missing.join("；")}</p>}
+    {pending.length > 0 && <p className="opportunity-missing"><b>待完成：</b>{pending.join("；")}</p>}
+    {missing.length > 0 && <p className="opportunity-missing"><b>missing：</b>{missing.join("；")}</p>}
     <div className="opportunity-levels">
       <span>Entry<b>{formatPrice(setup.entryLow)}–{formatPrice(setup.entryHigh)}</b></span>
       <span>Stop<b>{formatPrice(setup.stop)}</b></span>
       <span>TP1 / TP2 / TP3<b>{formatPrice(setup.tp1)} / {formatPrice(setup.tp2)} / {formatPrice(setup.tp3)}</b><small>{rr(setup.riskRewardTp1)} / {rr(setup.riskRewardTp2)} / {rr(setup.riskRewardTp3)}</small></span>
-      <span>主要淨 RR<b className={(setup.primaryRiskReward ?? 0) >= 2 ? "positive" : ""}>{rr(setup.primaryRiskReward)}</b><small>已扣來回費用與滑價</small></span>
+      <span>{setup.primaryTarget ?? "主要目標"} 淨 RR<b className={(setup.primaryRiskReward ?? 0) >= 2 ? "positive" : ""}>{rr(setup.primaryRiskReward)}</b><small>{setup.grade ?? "未分級"} · 已扣來回費用與滑價</small></span>
     </div>
     <p className="opportunity-invalidation"><b>失效：</b>{setup.invalidation}</p>
     <footer>
-      <span>{new Date(setup.updatedAt).toLocaleTimeString("zh-TW", { hour12: false })} · 信心 {setup.confidence}% · OKX closed</span>
+      <span>{new Date(setup.updatedAt).toLocaleTimeString("zh-TW", { hour12: false })} · 品質信心 {setup.confidence}% · {setup.source}</span>
       <div>
         <button type="button" onClick={() => actions.onOpenChart(setup.symbol, setup.timeframe, setup.strategy)}>開啟圖表</button>
         {actions.onCreateAlert && <button type="button" onClick={() => actions.onCreateAlert?.(setup)}>建立警報</button>}
@@ -115,9 +121,16 @@ function OpportunityCard({ setup, watchlist, actions }: { setup: StrategyResult;
   </article>;
 }
 
+function ConditionChecklist({ setup, limit }: { setup: StrategyResult; limit?: number }) {
+  const conditions = [...setup.hardConditions, ...setup.bonusConditions];
+  const rows = typeof limit === "number" ? conditions.slice(0, limit) : conditions;
+  return <ul className="checklist condition-checklist">{rows.map((condition) => <li className={condition.state === "met" ? "done" : condition.state === "missing" ? "missing" : ""} key={`${condition.kind}-${condition.id}`}>{condition.state === "met" ? "✓" : condition.state === "missing" ? "? missing" : "—"} <b>{condition.kind === "hard" ? "硬" : "加分"}</b> · {condition.label}</li>)}</ul>;
+}
+
 export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreateAlert, onToggleWatchlist }: { data: MarketHubPayload; watchlist: string[]; onNavigate: (view: string) => void } & OpportunityActions) {
   const prioritized = cockpitAssets(data.assets, watchlist);
-  const opportunities = rankSetups(prioritized.flatMap((asset) => asset.strategies).filter((setup) => setup.eligibleForScanner)).slice(0, 5);
+  const grouped = groupOpportunitySetups(prioritized.flatMap((asset) => asset.strategies));
+  const opportunities = grouped.opportunities.slice(0, 5);
   const strategyStates = STRATEGY_NAMES.map((name) => ({ name, best: rankSetups(data.assets.flatMap((asset) => asset.strategies).filter((setup) => setup.strategy === name))[0] ?? null }));
   const primaryLevels = prioritized[0]?.sessionLevels.slice(0, 8) ?? [];
   const noTrade = opportunities.length === 0;
@@ -132,7 +145,7 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
       <article className={`today-regime ${noTrade ? "no-trade" : ""}`}><span>今日市場狀態</span><strong>{regimeLabels[data.regime] ?? data.regime}</strong><p>{data.breadth.total ? `${data.breadth.advancing}/${data.breadth.total} 檔上漲` : "Breadth N/A"} · {data.pipeline.stage === "showing-stale" ? "稍早資料" : "OKX 即時"}</p></article>
       <SessionTimeCard session={data.session} />
       <article><span>衍生品背景</span><strong>{data.riskAlerts.length ? `${data.riskAlerts.length} 項異常` : "未見明顯異常"}</strong><p>Funding／OI／Positioning 只確認背景，不單獨給方向。</p></article>
-      <article><span>決策門檻</span><strong>1.5R 觀察 · 2R 執行</strong><p>淨值已扣雙邊手續費與滑價，不人工拉遠目標。</p></article>
+      <article><span>決策門檻</span><strong>1.5R B級 · 2R A級</strong><p>兩級皆可執行；淨值已扣雙邊手續費與滑價，不人工拉遠目標。</p></article>
     </section>
 
     <section className="command-split">
@@ -145,31 +158,37 @@ export function CockpitView({ data, watchlist, onNavigate, onOpenChart, onCreate
     </section>
 
     <section className="terminal-panel opportunity-panel-v13"><div className="panel-heading"><div><p>BEST OPPORTUNITIES</p><h2>最佳機會 · 最多 5 個</h2></div></div>
-      <div className="opportunity-grid-v13">{opportunities.length ? opportunities.map((setup) => <OpportunityCard key={setup.id} setup={setup} watchlist={watchlist} actions={actions} />) : <div className="no-trade-decision"><b>等待也是交易決策</b><p>目前沒有策略同時具備真實結構空間與至少 1.5 的淨 RR。不要為了交易而交易。</p></div>}</div>
+      {grouped.conflicts.length > 0 && <div className="signal-conflicts" role="status"><b>訊號衝突／不交易</b>{grouped.conflicts.map((conflict) => <p key={conflict.symbol}>{conflict.symbol.replace("USDT", "")} · {conflict.long.map((item) => strategyLabels[item.strategy]).join("＋")} 偏多 vs {conflict.short.map((item) => strategyLabels[item.strategy]).join("＋")} 偏空；已合併排除，不重複列出。</p>)}</div>}
+      <div className="opportunity-grid-v13">{opportunities.length ? opportunities.map((opportunity) => <OpportunityCard key={opportunity.id} opportunity={opportunity} watchlist={watchlist} actions={actions} />) : <div className="no-trade-decision"><b>目前沒有值得交易的設定</b><p>沒有不衝突的策略同時具備真實結構空間與至少 1.5 的淨 RR。等待也是交易決策。</p></div>}</div>
     </section>
 
     <section className="terminal-panel strategy-status-board"><div className="panel-heading"><div><p>THREE PLAYBOOKS</p><h2>三套策略現在適合嗎</h2></div></div>
-      <div>{strategyStates.map(({ name, best }, index) => <article key={name}><header><b>0{index + 1} · {strategyLabels[name]}</b>{best ? <StatePill state={best.status} /> : <StatePill state="missing" />}</header><p>{best ? `${best.symbol.replace("USDT", "")} · ${best.timeframe} · ${directionLabels[best.direction]}` : "資料不足"}</p><small>{best?.missingConditions[0] ?? best?.reasons[0] ?? strategyTips[name]}</small></article>)}</div>
+      <div>{strategyStates.map(({ name, best }, index) => <article key={name}><header><b>0{index + 1} · {strategyLabels[name]}</b>{best ? <StatePill state={best.status} /> : <StatePill state="missing" />}</header><p>{best ? `${best.symbol.replace("USDT", "")} · ${best.timeframe} · ${directionLabels[best.direction]}${best.submodel ? ` · ${best.submodel === "Reversal" ? "反轉" : "延續"}` : ""}` : "資料不足"}</p><small>{best?.missingData[0] ? `missing：${best.missingData[0]}` : best?.pendingConditions[0] ?? best?.reasons[0] ?? strategyTips[name]}</small></article>)}</div>
     </section>
   </div>;
 }
 
-type ScannerRow = { asset: AssetSnapshot; setup: StrategyResult };
 export function ScannerView({ data, minimumNetRr = 1.5, onOpenChart }: { data: MarketHubPayload; watchlist: string[]; minimumNetRr?: number; onOpenChart: OpenChart }) {
   const [search, setSearch] = useState("");
   const [timeframe, setTimeframe] = useState<Timeframe | "All">("All");
   const [strategy, setStrategy] = useState<StrategyName | "All">("All");
   const [direction, setDirection] = useState("All");
-  const rows = useMemo(() => data.assets.flatMap((asset) => asset.strategies.map((setup): ScannerRow => ({ asset, setup }))).filter(({ asset, setup }) =>
-    asset.symbol.toLowerCase().includes(search.toLowerCase()) &&
+  const grouped = useMemo(() => groupOpportunitySetups(data.assets.flatMap((asset) => asset.strategies).filter((setup) =>
+    setup.symbol.toLowerCase().includes(search.toLowerCase()) &&
     (timeframe === "All" || setup.timeframe === timeframe) && (strategy === "All" || setup.strategy === strategy) &&
-    (direction === "All" || setup.direction === direction) &&
-    (setup.primaryRiskReward ?? -Infinity) >= Math.max(1.5, minimumNetRr),
-  ).sort((a, b) => (Number(b.setup.status === "eligible") - Number(a.setup.status === "eligible")) || (b.setup.primaryRiskReward ?? 0) - (a.setup.primaryRiskReward ?? 0) || b.setup.confidence - a.setup.confidence), [data.assets, direction, minimumNetRr, search, strategy, timeframe]);
-  return <div className="view-stack"><ViewTitle eyebrow="OPPORTUNITY SCANNER" title="先看真實空間，再談方向。" copy="只掃描三套策略。預設最低淨 RR 1.5；不足者不進榜，1.5–2R 只觀察，≥2R 且條件完整才可執行。" />
-    <section className="filter-bar"><label>搜尋<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="BTC, ETH, SOL…" /></label><label>週期<select value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe | "All")}><option value="All">全部</option>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select></label><label>策略<select value={strategy} onChange={(event) => setStrategy(event.target.value as StrategyName | "All")}><option value="All">全部</option>{STRATEGY_NAMES.map((item) => <option key={item} value={item}>{strategyLabels[item]}</option>)}</select></label><label>方向<select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="All">全部</option><option value="Long">偏多</option><option value="Short">偏空</option><option value="Neutral">中性</option></select></label><span>{rows.length} 個結果</span></section>
-    <section className="scanner-table"><div className="scanner-row scanner-head"><span>幣種／週期</span><span>價格／24h</span><span>策略／方向</span><span>狀態</span><span>Entry／Stop</span><span>TP1／2／3</span><span>淨 RR</span><span>信心</span></div>{rows.map(({ asset, setup }) => <button className="scanner-row" key={setup.id} type="button" onClick={() => onOpenChart(asset.symbol, setup.timeframe, setup.strategy)}><span data-label="幣種／週期" className="symbol-cell"><b>{asset.symbol.replace("USDT", "")} · {setup.timeframe}</b><small>{new Date(setup.updatedAt).toLocaleTimeString("zh-TW", { hour12: false })} · {stateLabels[asset.price.state]}</small></span><span data-label="價格／24h"><b>{formatPrice(asset.price.value)}</b><small className={tone(asset.change24h.value)}>{formatPercent(asset.change24h.value)}</small></span><span data-label="策略／方向">{strategyLabels[setup.strategy]}<small>{directionLabels[setup.direction]}</small></span><span data-label="狀態"><StatePill state={setup.status} /><small>{setup.conditionsMet}/{setup.conditionsTotal} 條件</small></span><span data-label="Entry／Stop"><b>{formatPrice(setup.entryLow)}–{formatPrice(setup.entryHigh)}</b><small>Stop {formatPrice(setup.stop)}</small></span><span data-label="TP1／2／3"><b>{formatPrice(setup.tp1)} / {formatPrice(setup.tp2)} / {formatPrice(setup.tp3)}</b><small>{rr(setup.riskRewardTp1)} / {rr(setup.riskRewardTp2)} / {rr(setup.riskRewardTp3)}</small></span><span data-label="淨 RR"><b>{rr(setup.primaryRiskReward)}</b><small>{setup.primaryTarget ?? "N/A"}</small></span><span data-label="信心" className="confidence-cell"><b>{setup.confidence}%</b><i style={{ width: `${setup.confidence}%` }} /></span></button>)}</section>
-    {!rows.length && <div className="no-trade-decision"><b>目前不適合交易</b><p>沒有結果通過目前的淨 RR 與條件篩選。等待也是交易決策。</p></div>}
+    (direction === "All" || setup.direction === direction),
+  ), minimumNetRr), [data.assets, direction, minimumNetRr, search, strategy, timeframe]);
+  const assetMap = useMemo(() => new Map(data.assets.map((asset) => [asset.symbol, asset])), [data.assets]);
+  return <div className="view-stack"><ViewTitle eyebrow="OPPORTUNITY SCANNER" title="先看真實空間，再談方向。" copy="只列硬條件完整且淨 RR 至少 1.5 的機會；1.5–2R 為 B 級、≥2R 為 A 級，兩者皆可執行。加分條件只影響品質信心。" />
+    <section className="filter-bar"><label>搜尋<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="BTC, ETH, SOL…" /></label><label>週期<select value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe | "All")}><option value="All">全部</option>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select></label><label>策略<select value={strategy} onChange={(event) => setStrategy(event.target.value as StrategyName | "All")}><option value="All">全部</option>{STRATEGY_NAMES.map((item) => <option key={item} value={item}>{strategyLabels[item]}</option>)}</select></label><label>方向<select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="All">全部</option><option value="Long">偏多</option><option value="Short">偏空</option><option value="Neutral">中性</option></select></label><span>{grouped.opportunities.length} 個結果</span></section>
+    {grouped.conflicts.length > 0 && <div className="signal-conflicts" role="status"><b>訊號衝突／不交易</b>{grouped.conflicts.map((conflict) => <p key={conflict.symbol}>{conflict.symbol.replace("USDT", "")} · 多空可執行策略同時成立，已合併排除。</p>)}</div>}
+    <section className="scanner-table"><div className="scanner-row scanner-head"><span>幣種／週期</span><span>價格／24h</span><span>策略／方向</span><span>狀態</span><span>Entry／Stop</span><span>TP1／2／3</span><span>淨 RR</span><span>品質信心</span></div>{grouped.opportunities.map((opportunity) => {
+      const setup = opportunity.primary;
+      const asset = assetMap.get(opportunity.symbol);
+      if (!asset) return null;
+      return <button className="scanner-row" key={opportunity.id} type="button" onClick={() => onOpenChart(asset.symbol, setup.timeframe, setup.strategy)}><span data-label="幣種／週期" className="symbol-cell"><b>{asset.symbol.replace("USDT", "")} · {setup.timeframe}</b><small>{new Date(setup.updatedAt).toLocaleTimeString("zh-TW", { hour12: false })} · {stateLabels[asset.price.state]}</small></span><span data-label="價格／24h"><b>{formatPrice(asset.price.value)}</b><small className={tone(asset.change24h.value)}>{formatPercent(asset.change24h.value)}</small></span><span data-label="策略／方向">{opportunity.setups.map((item) => strategyLabels[item.strategy]).join(" × ")}<small>{directionLabels[setup.direction]} · {opportunity.setups.length > 1 ? `Confluence ${opportunity.setups.length}` : setup.submodel ? (setup.submodel === "Reversal" ? "反轉模型" : "延續模型") : "單策略"}</small></span><span data-label="狀態"><StatePill state={setup.status} /><small>{setup.grade}級 · 硬條件 {setup.hardConditionsMet}/{setup.hardConditionsTotal}</small></span><span data-label="Entry／Stop"><b>{formatPrice(setup.entryLow)}–{formatPrice(setup.entryHigh)}</b><small>Stop {formatPrice(setup.stop)}</small></span><span data-label="TP1／2／3"><b>{formatPrice(setup.tp1)} / {formatPrice(setup.tp2)} / {formatPrice(setup.tp3)}</b><small>{rr(setup.riskRewardTp1)} / {rr(setup.riskRewardTp2)} / {rr(setup.riskRewardTp3)}</small></span><span data-label="淨 RR"><b>{rr(setup.primaryRiskReward)}</b><small>{setup.primaryTarget ?? "N/A"}</small></span><span data-label="品質信心" className="confidence-cell"><b>{setup.confidence}%</b><i style={{ width: `${setup.confidence}%` }} /></span></button>;
+    })}</section>
+    {!grouped.opportunities.length && <div className="no-trade-decision"><b>目前沒有值得交易的設定</b><p>沒有不衝突的結果通過目前的硬條件與淨 RR 門檻。等待也是交易決策。</p></div>}
   </div>;
 }
 
@@ -184,11 +203,11 @@ export function DerivativesView({ data }: { data: MarketHubPayload }) {
 }
 
 export function StrategyView({ data, onOpenChart }: { data: MarketHubPayload; onOpenChart: OpenChart }) {
-  return <div className="view-stack"><ViewTitle eyebrow="STRATEGY DESK" title="只保留三套可驗證的日內策略。" copy="Funding、OI 與 Positioning 僅作背景；每套策略都以已收盤 OKX K 線與結構目標計算。" /><section className="strategy-desk three-strategies">{STRATEGY_NAMES.map((name, index) => {
+  return <div className="view-stack"><ViewTitle eyebrow="STRATEGY DESK" title="只保留三套可驗證的日內策略。" copy="硬條件決定有效性；加分條件只提高品質信心，missing 不會被當成失敗或補成 0。所有策略使用已收盤 OKX K 線與結構目標。" /><section className="strategy-desk three-strategies">{STRATEGY_NAMES.map((name, index) => {
     const results = rankSetups(data.assets.flatMap((asset) => asset.strategies).filter((item) => item.strategy === name));
     const best = results[0];
-    const executable = results.filter((item) => item.status === "eligible").length;
-    return <article className="terminal-panel" key={name}><div className="panel-heading"><div><p>STRATEGY 0{index + 1}</p><h2>{strategyLabels[name]}</h2></div><span>{executable} 個可執行</span></div><p className="plan-copy">{strategyTips[name]}</p>{best ? <><div className="mini-plan"><span className={`direction ${best.direction.toLowerCase()}`}>{directionLabels[best.direction]}</span><b>{best.symbol.replace("USDT", "")} · {best.timeframe}</b><StatePill state={best.status} /><em>{rr(best.primaryRiskReward)}</em></div><ul className="checklist">{best.reasons.slice(0, 3).map((reason) => <li className="done" key={reason}>✓ {reason}</li>)}{best.missingConditions.slice(0, 3).map((reason) => <li key={reason}>— {reason}</li>)}</ul><button className="secondary-terminal-button" type="button" onClick={() => onOpenChart(best.symbol, best.timeframe, best.strategy)}>查看圖表與計畫 →</button></> : <div className="inline-empty">資料不足，不做判定。</div>}</article>;
+    const executable = results.filter((item) => item.status === "executable").length;
+    return <article className="terminal-panel" key={name}><div className="panel-heading"><div><p>STRATEGY 0{index + 1}</p><h2>{strategyLabels[name]}</h2></div><span>{executable} 個可執行</span></div><p className="plan-copy">{strategyTips[name]}</p>{best ? <><div className="mini-plan"><span className={`direction ${best.direction.toLowerCase()}`}>{directionLabels[best.direction]}</span><b>{best.symbol.replace("USDT", "")} · {best.timeframe}{best.submodel ? ` · ${best.submodel === "Reversal" ? "反轉" : "延續"}` : ""}</b><StatePill state={best.status} /><em>{best.grade ? `${best.grade} · ` : ""}{rr(best.primaryRiskReward)}</em></div><ConditionChecklist setup={best} limit={5} />{best.missingData.length > 0 && <p className="opportunity-missing"><b>missing：</b>{best.missingData.slice(0, 2).join("；")}</p>}<button className="secondary-terminal-button" type="button" onClick={() => onOpenChart(best.symbol, best.timeframe, best.strategy)}>查看圖表與計畫 →</button></> : <div className="inline-empty">資料不足，不做判定。</div>}</article>;
   })}</section></div>;
 }
 
@@ -201,7 +220,7 @@ export function ChartView({ data, symbol, initialTimeframe, initialStrategy, wat
   const symbolOptions = prioritizeByWatchlist(data.assets, watchlist);
   return <div className="view-stack decision-view"><section className="view-title with-action"><div><p>CHART WORKSPACE</p><h1>{asset.symbol.replace("USDT", "/USDT")} 決策</h1><span>圖表與策略皆指定 OKX 永續；策略位只由 Market Data Hub 已收盤 K 線產生。</span></div><div className="chart-toolbar"><select aria-label="選擇幣種" value={asset.symbol} onChange={(event) => onSymbolChange(event.target.value)}>{symbolOptions.map((item) => <option key={item.symbol} value={item.symbol}>{watchlist.includes(item.symbol) ? `★ ${item.symbol}` : item.symbol}</option>)}</select><select aria-label="選擇圖表週期" value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe)}>{TIMEFRAMES.map((item) => <option key={item}>{item}</option>)}</select><select aria-label="選擇策略" value={strategy} onChange={(event) => { const next = event.target.value as StrategyName; setStrategy(next); const strategyTimeframe = asset.strategies.find((item) => item.strategy === next)?.timeframe; if (strategyTimeframe) setTimeframe(strategyTimeframe); }}>{STRATEGY_NAMES.map((item) => <option key={item} value={item}>{strategyLabels[item]}</option>)}</select></div></section>
     <section className="chart-layout decision-layout"><article className="terminal-panel chart-panel decision-tv-panel"><div className="chart-toolbar tv-toolbar"><p>TradingView · OKX:{asset.symbol}.P · {timeframe}</p></div><TradingViewWidget symbol={asset.symbol} timeframe={timeframe} theme={theme} height={560} /></article>
-      <article className="terminal-panel strategy-plan decision-plan-card"><div className="panel-heading"><div><p>TRADE PLAN</p><h2>{setup ? strategyLabels[setup.strategy] : "策略資料不足"}</h2></div>{setup && <StatePill state={setup.status} />}</div>{setup ? <><div className="plan-regime"><span className={`direction ${setup.direction.toLowerCase()}`}>{directionLabels[setup.direction]}</span><b>{setup.timeframe}</b><em>{setup.conditionsMet}/{setup.conditionsTotal} 條件</em></div><div className="plan-levels"><span>進場區<b>{formatPrice(setup.entryLow)}–{formatPrice(setup.entryHigh)}</b><small>最不利邊界計算</small></span><span>結構 Stop<b>{formatPrice(setup.stop)}</b></span><span>TP1 / TP2 / TP3<b>{formatPrice(setup.tp1)} / {formatPrice(setup.tp2)} / {formatPrice(setup.tp3)}</b><small>淨 RR {rr(setup.riskRewardTp1)} / {rr(setup.riskRewardTp2)} / {rr(setup.riskRewardTp3)}</small></span><span>{setup.primaryTarget ?? "主要目標"} 淨 RR<b>{rr(setup.primaryRiskReward)}</b><small>手續費 {(setup.feeRate * 100).toFixed(3)}%／邊 · 滑價 {(setup.slippageRate * 100).toFixed(3)}%／邊</small></span></div><p className="plan-copy"><b>何時成立：</b>{setup.trigger}</p><p className="plan-copy"><b>何時失效：</b>{setup.invalidation}</p><p className="plan-copy"><b>目標依據：</b>{setup.targetBasis}</p><ul className="checklist">{setup.reasons.map((reason) => <li className="done" key={reason}>✓ {reason}</li>)}{setup.missingConditions.map((reason) => <li key={reason}>— {reason}</li>)}</ul><div className="formula-note"><b>策略說明</b><p>{strategyTips[setup.strategy]}</p></div></> : <div className="inline-empty">目前資料不足，先不產生計畫。</div>}</article>
+      <article className="terminal-panel strategy-plan decision-plan-card"><div className="panel-heading"><div><p>TRADE PLAN</p><h2>{setup ? `${strategyLabels[setup.strategy]}${setup.submodel ? ` · ${setup.submodel === "Reversal" ? "反轉模型" : "延續模型"}` : ""}` : "策略資料不足"}</h2></div>{setup && <StatePill state={setup.status} />}</div>{setup ? <><div className="plan-regime"><span className={`direction ${setup.direction.toLowerCase()}`}>{directionLabels[setup.direction]}</span><b>{setup.timeframe}</b><em>硬 {setup.hardConditionsMet}/{setup.hardConditionsTotal} · 加分 {setup.bonusConditionsMet}/{setup.bonusConditionsTotal}</em></div><div className="plan-levels"><span>進場區<b>{formatPrice(setup.entryLow)}–{formatPrice(setup.entryHigh)}</b><small>最不利邊界計算</small></span><span>結構 Stop<b>{formatPrice(setup.stop)}</b><small>ATR 只作結構外緩衝</small></span><span>TP1 / TP2 / TP3<b>{formatPrice(setup.tp1)} / {formatPrice(setup.tp2)} / {formatPrice(setup.tp3)}</b><small>淨 RR {rr(setup.riskRewardTp1)} / {rr(setup.riskRewardTp2)} / {rr(setup.riskRewardTp3)}</small></span><span>{setup.primaryTarget ?? "主要目標"} 淨 RR<b>{rr(setup.primaryRiskReward)}</b><small>{setup.grade ? `${setup.grade}級 · ` : ""}手續費 {(setup.feeRate * 100).toFixed(3)}%／邊 · 滑價 {(setup.slippageRate * 100).toFixed(3)}%／邊</small></span></div><p className="plan-copy"><b>何時成立：</b>{setup.trigger}</p><p className="plan-copy"><b>何時失效：</b>{setup.invalidation}</p><p className="plan-copy"><b>目標依據：</b>{setup.targetBasis}</p><ConditionChecklist setup={setup} />{setup.missingData.length > 0 && <p className="opportunity-missing"><b>missing：</b>{setup.missingData.join("；")}</p>}<div className="formula-note"><b>策略說明</b><p>{strategyTips[setup.strategy]}</p><small>Confidence 只反映品質；未通過硬條件時不能變成可執行。</small></div></> : <div className="inline-empty">目前資料不足，先不產生計畫。</div>}</article>
     </section></div>;
 }
 

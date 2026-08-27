@@ -77,7 +77,7 @@ function observe(rule: AlertRule, data: MarketHubPayload): Observation {
     }
     case "strategy_eligible": {
       if (!strategy) return missing(rule.strategy && !resolveActiveStrategy(rule.strategy) ? "此舊策略已標為 legacy，不再產生新方向或觸發" : "找不到指定策略或週期");
-      return { available: strategy.status !== "missing", matched: strategy.status === "eligible" && strategy.eligibleForScanner, value: strategy.confidence, reason: `${strategy.strategy} ${strategy.timeframe} 為 ${strategy.status}，淨 RR ${strategy.primaryRiskReward?.toFixed(2) ?? "N/A"}R`, snapshotKey: `${strategy.updatedAt}:${candleKey}:${strategy.status}` };
+      return { available: strategy.dataState !== "missing", matched: strategy.status === "executable" && strategy.eligibleForScanner, value: strategy.confidence, reason: `${strategy.strategy}${strategy.submodel ? ` ${strategy.submodel}` : ""} ${strategy.timeframe} 為 ${strategy.status}，${strategy.grade ?? "未分級"}，淨 RR ${strategy.primaryRiskReward?.toFixed(2) ?? "N/A"}R`, snapshotKey: `${strategy.updatedAt}:${candleKey}:${strategy.status}` };
     }
     case "liquidity_sweep": {
       const sweep = asset.events.find((event) => event.kind === "liquidity_sweep");

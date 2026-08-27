@@ -618,18 +618,24 @@ html[data-theme="light"] .core-asset:hover { background: var(--surface-elevated)
   border-radius: 999px;
 }
 .metric-state.live,
+.metric-state.executable,
 .metric-state.eligible,
 .metric-state.triggered,
 html[data-theme="light"] .metric-state.live,
+html[data-theme="light"] .metric-state.executable,
 html[data-theme="light"] .metric-state.eligible,
 html[data-theme="light"] .metric-state.triggered {
   color: var(--positive);
   background: var(--positive-soft);
   border-color: color-mix(in srgb, var(--positive) 30%, var(--border));
 }
+.metric-state.forming,
+.metric-state.waiting_trigger,
 .metric-state.waiting,
 .metric-state.cooldown,
 .metric-state.stale,
+html[data-theme="light"] .metric-state.forming,
+html[data-theme="light"] .metric-state.waiting_trigger,
 html[data-theme="light"] .metric-state.waiting,
 html[data-theme="light"] .metric-state.cooldown,
 html[data-theme="light"] .metric-state.stale {
@@ -638,9 +644,13 @@ html[data-theme="light"] .metric-state.stale {
   border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
 }
 .metric-state.missing,
+.metric-state.not_applicable,
+.metric-state.invalidated,
 .metric-state.invalid,
 .metric-state.disabled,
 html[data-theme="light"] .metric-state.missing,
+html[data-theme="light"] .metric-state.not_applicable,
+html[data-theme="light"] .metric-state.invalidated,
 html[data-theme="light"] .metric-state.invalid,
 html[data-theme="light"] .metric-state.disabled {
   color: var(--tertiary-foreground);
@@ -1061,14 +1071,4 @@ html:not([data-theme="light"]) .mobile-more-menu > button {
   .journal-table > div > span:nth-child(n) { align-items: flex-start; text-align: left; }
   .no-trade-decision { padding: 30px 17px; }
   .no-trade-decision b { font-size: 22px; }
-}
-@media (max-width: 760px) {
-  html[data-theme="light"] .mobile-brand .workbench-wordmark > span {
-    color: var(--primary);
-  }
-
-  html[data-theme="light"] .mobile-brand .workbench-emblem::after {
-    background: var(--surface);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 25%, transparent);
-  }
 }

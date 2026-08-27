@@ -5,6 +5,7 @@ import { ASSET_NAMES as NAMES } from "./symbols";
 import {
   DEFAULT_TRADE_COSTS,
   TIMEFRAMES,
+  normalizeStrategyResult,
   type AssetSnapshot,
   type DataState,
   type MarketHubPayload,
@@ -73,7 +74,7 @@ function buildTimeframe(timeframe: Timeframe, candles: TimeframeSnapshot["candle
 function preferredSetup(strategies: StrategyResult[]) {
   return strategies
     .filter((strategy) => strategy.eligibleForScanner)
-    .sort((a, b) => (Number(b.status === "eligible") - Number(a.status === "eligible")) || (b.primaryRiskReward ?? 0) - (a.primaryRiskReward ?? 0) || b.confidence - a.confidence)[0] ?? null;
+    .sort((a, b) => (Number(b.grade === "A") - Number(a.grade === "A")) || (b.primaryRiskReward ?? 0) - (a.primaryRiskReward ?? 0) || b.confidence - a.confidence)[0] ?? null;
 }
 
 export function mergeProviderPayloads(input: {
@@ -199,6 +200,8 @@ export function markPayloadStale(payload: MarketHubPayload, storedAt: number, no
       const snapshot = asset.timeframes?.[timeframe];
       if (snapshot) Object.values(snapshot).forEach(mark);
     });
+    asset.strategies = asset.strategies.map((strategy) => ({ ...strategy, dataState: strategy.dataState === "missing" ? "missing" : "stale" }));
+    asset.setup = asset.setup ? { ...asset.setup, dataState: asset.setup.dataState === "missing" ? "missing" : "stale" } : null;
   }
   if (stale.fearGreed.state !== "missing") { stale.fearGreed.state = "stale"; stale.fearGreed.reason = "顯示最後成功資料"; }
   stale.health = stale.health.map((provider) => ({ ...provider, state: provider.state === "missing" ? "missing" : "stale" }));
@@ -227,7 +230,7 @@ export function mergeSnapshotsProgressive(prev: MarketHubPayload | null, next: M
       if (after?.candles.length) return [timeframe, after];
       return [timeframe, before ?? after];
     })) as AssetSnapshot["timeframes"];
-    const strategies = b.strategies?.length ? b.strategies : (a.strategies ?? []);
+    const strategies = (b.strategies?.length ? b.strategies : (a.strategies ?? [])).map(normalizeStrategyResult);
     return {
       ...b,
       price: pickMetric(a.price, b.price), change15m: pickMetric(a.change15m, b.change15m),

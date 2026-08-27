@@ -9,11 +9,12 @@ import { __setMarketCacheForTests, buildMarketHub, getMarketHub } from "../lib/m
 import { markPayloadStale, mergeProviderPayloads, mergeSnapshotsProgressive, metric } from "../lib/market/merge";
 import { buildSessionLevels, currentSession } from "../lib/market/sessions";
 import { validateAlertSnapshot } from "../lib/market/snapshot";
-import { calculateRiskRewards, evaluateStrategies } from "../lib/market/strategies";
+import { calculateRiskRewards, evaluateStrategies, gradeForNetRr, ictContinuation, ictReversal } from "../lib/market/strategies";
 import { DEFAULT_TRADE_COSTS, TIMEFRAMES, emptyCandleMap, type Candle, type CandleMap, type ProviderHealth, type ProviderPayload, type RawAsset, type Timeframe } from "../lib/market/types";
 import { authenticatedUserId } from "../lib/persistence/auth";
 import { calculatePosition } from "../lib/risk/calculator";
 import type { AlertRule, JournalEntry } from "../lib/workbench/types";
+import { groupOpportunitySetups } from "../lib/workbench/opportunities";
 import { cockpitAssets, watchlistAssets } from "../lib/workbench/watchlist";
 
 const now = "2026-08-21T12:00:00.000Z";
@@ -64,25 +65,52 @@ test("v13 exposes exactly three deterministic strategies and all six required ti
 test("all three strategies remain missing instead of inventing signals when candles are absent", () => {
   const results = evaluateStrategies(strategyContext(emptyCandleMap()));
   assert.equal(results.length, 3);
-  assert.ok(results.every((result) => result.status === "missing" && result.direction === "Neutral" && result.primaryRiskReward === null));
+  assert.ok(results.every((result) => result.status === "not_applicable" && result.dataState === "missing" && result.missingData.length > 0 && result.direction === "Neutral" && result.primaryRiskReward === null));
 });
 
 test("net RR uses worst entry boundary and deducts round-trip fees plus slippage", () => {
   const result = calculateRiskRewards({ direction: "Long", entryLow: 99, entryHigh: 101, stop: 95, tp1: 106, tp2: 111, tp3: 116, primaryTarget: "TP2", feeRate: 0.001, slippageRate: 0.0005 });
   const grossRisk = 6;
-  const cost = 101 * 0.003;
+  const oneWayRate = 0.0015;
+  const netRisk = grossRisk + 101 * oneWayRate + 95 * oneWayRate;
   assert.equal(result.entryBasis, "conservative-boundary");
-  assert.ok(Math.abs(result.riskRewardTp1! - ((5 - cost) / (grossRisk + cost))) < 1e-10);
-  assert.ok(Math.abs(result.riskRewardTp2! - ((10 - cost) / (grossRisk + cost))) < 1e-10);
+  assert.ok(Math.abs(result.riskRewardTp1! - ((5 - (101 + 106) * oneWayRate) / netRisk)) < 1e-10);
+  assert.ok(Math.abs(result.riskRewardTp2! - ((10 - (101 + 111) * oneWayRate) / netRisk)) < 1e-10);
   assert.equal(result.primaryRiskReward, result.riskRewardTp2);
   assert.ok(result.grossRiskRewardTp2! > result.riskRewardTp2!);
 });
 
-test("no strategy marked executable can bypass the 2R net threshold", () => {
+test("1.5R is executable B grade and 2R is executable A grade", () => {
+  assert.equal(gradeForNetRr(1.49), null);
+  assert.equal(gradeForNetRr(1.5), "B");
+  assert.equal(gradeForNetRr(1.99), "B");
+  assert.equal(gradeForNetRr(2), "A");
   for (const setup of evaluateStrategies(strategyContext())) {
-    if (setup.status === "eligible") assert.ok(setup.primaryRiskReward !== null && setup.primaryRiskReward >= 2);
-    if (setup.eligibleForScanner) assert.ok(setup.primaryRiskReward !== null && setup.primaryRiskReward >= 1.5);
+    if (setup.status === "executable") assert.ok(setup.primaryRiskReward !== null && setup.primaryRiskReward >= 1.5 && setup.grade !== null);
+    if (setup.eligibleForScanner) assert.equal(setup.status, "executable");
   }
+});
+
+test("strategies separate hard, bonus and missing data while ICT keeps two submodels", () => {
+  const results = evaluateStrategies(strategyContext());
+  assert.ok(results.every((setup) => setup.hardConditions.length > 0 && setup.bonusConditions.length > 0));
+  assert.ok(results.every((setup) => setup.conditionsTotal === setup.hardConditionsTotal));
+  assert.equal(ictReversal(strategyContext()).submodel, "Reversal");
+  assert.equal(ictContinuation(strategyContext()).submodel, "Continuation");
+  assert.ok(ictContinuation(strategyContext()).trigger.includes("不要求先 Sweep"));
+});
+
+test("same-symbol confluence merges and opposite directions become no-trade conflict", () => {
+  const base = evaluateStrategies(strategyContext())[0];
+  const longA = { ...base, strategy: "EMA Trend" as const, status: "executable" as const, direction: "Long" as const, grade: "B" as const, primaryRiskReward: 1.7, eligibleForScanner: true };
+  const longB = { ...base, id: `${base.id}-bb`, strategy: "Bollinger Breakout" as const, status: "executable" as const, direction: "Long" as const, grade: "A" as const, primaryRiskReward: 2.2, eligibleForScanner: true };
+  const merged = groupOpportunitySetups([longA, longB]);
+  assert.equal(merged.opportunities.length, 1);
+  assert.equal(merged.opportunities[0].setups.length, 2);
+  assert.equal(merged.opportunities[0].primary.strategy, "Bollinger Breakout");
+  const conflict = groupOpportunitySetups([longA, { ...longB, direction: "Short" as const }]);
+  assert.equal(conflict.opportunities.length, 0);
+  assert.equal(conflict.conflicts.length, 1);
 });
 
 test("session clock uses the five New York windows and handles daylight saving", () => {
@@ -223,10 +251,14 @@ test("watchlist, risk sizing, journal analytics, identity and migrations remain 
   assert.equal(stats.profitFactor, 2);
 
   assert.notEqual(authenticatedUserId(new Request("https://site.test/api", { headers: { "oai-authenticated-user-id": "user-a" } })), authenticatedUserId(new Request("https://site.test/api", { headers: { "oai-authenticated-user-id": "user-b" } })));
-  const migration = readFileSync(new URL("../drizzle/0001_v13_strategy_compat.sql", import.meta.url), "utf8");
-  assert.match(migration, /strategy_legacy/);
-  assert.match(migration, /PRAGMA optimize/);
-  assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM/);
+  const legacyMigration = readFileSync(new URL("../drizzle/0001_v13_strategy_compat.sql", import.meta.url), "utf8");
+  const rulesetMigration = readFileSync(new URL("../drizzle/0002_v13_1_strategy_ruleset.sql", import.meta.url), "utf8");
+  assert.match(legacyMigration, /strategy_legacy/);
+  assert.match(rulesetMigration, /strategy_model/);
+  assert.match(rulesetMigration, /strategy_ruleset/);
+  assert.match(rulesetMigration, /v13-legacy/);
+  assert.match(rulesetMigration, /PRAGMA optimize/);
+  assert.doesNotMatch(`${legacyMigration}\n${rulesetMigration}`, /DROP TABLE|DELETE FROM/);
 });
 
 test("default trade costs stay conservative and explicit", () => {
