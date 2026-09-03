@@ -6,7 +6,10 @@ import { summarizeTrades, type BacktestTrade } from "../lib/backtest/engine";
 import { calculateJournalAnalytics } from "../lib/journal/analytics";
 import { mapWithConcurrency } from "../lib/market/http";
 import { __setMarketCacheForTests, buildMarketHub, getMarketHub } from "../lib/market/hub";
+import { positioningScore } from "../lib/market/indicators";
 import { markPayloadStale, mergeProviderPayloads, mergeSnapshotsProgressive, metric } from "../lib/market/merge";
+import { contractNotionalUsd } from "../lib/market/providers/okx";
+import { CORE_SYMBOLS } from "../lib/market/symbols";
 import { buildSessionLevels, currentSession } from "../lib/market/sessions";
 import { validateAlertSnapshot } from "../lib/market/snapshot";
 import { calculateRiskRewards, evaluateStrategies, gradeForNetRr, ictContinuation, ictReversal } from "../lib/market/strategies";
@@ -150,6 +153,16 @@ test("OKX-only hub returns three strategies and preserves missing derivatives as
   assert.equal(payload.assets[0].positioning.value, null);
   assert.equal(payload.assets[0].strategies.length, 3);
   assert.equal(payload.pipeline.binanceDurationMs, null);
+});
+
+test("v14 positioning pressure stays relative and liquidation notional follows OKX contract specs", () => {
+  const pressure = positioningScore([1, 1.01, 1.02, 1.03, 1.5], [1, 1, 1, 1, 1], [1, 1, 1.01, 1.02, 1.4]);
+  assert.ok(pressure !== null && pressure > 0);
+  assert.equal(positioningScore([], [1, 1, 1, 1, 1]), null);
+  assert.ok(positioningScore([1, 1, 1, 1, 1], [], [1, 1.01, 1.02, 1.03, 1.5])! > 0);
+  assert.equal(contractNotionalUsd(10, 100_000, { ctVal: 0.01, ctMult: 1, ctValCcy: "BTC" }, "BTC"), 10_000);
+  assert.equal(contractNotionalUsd(10, 100_000, { ctVal: 1, ctMult: 1, ctValCcy: "UNKNOWN" }, "BTC"), null);
+  assert.equal(CORE_SYMBOLS.length, 30);
 });
 
 test("progressive merge retains L1 price and accepts richer L3 strategy candles", () => {

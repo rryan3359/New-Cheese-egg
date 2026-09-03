@@ -8,10 +8,10 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? (productionHost ? `https://$
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Cheese&Egg｜日內量化決策台",
-  description: "整合 OKX 已收盤永續 K 線、三套日內策略、結構目標、淨 RR、風控與資料健康的量化決策台。",
+  description: "整合 30 個 OKX 永續市場、公開強平事件、大戶籌碼壓力、三套日內策略、淨 RR 與風控的量化決策台。",
   openGraph: {
     title: "Cheese&Egg｜日內量化決策台",
-    description: "交易總攬、三套策略、真實結構目標與淨 RR；沒有好機會時，等待也是交易決策。",
+    description: "30 幣市場總攬、公開強平事件、大戶籌碼壓力、三套策略、真實結構目標與淨 RR。",
     url: siteUrl,
     siteName: "Cheese&Egg",
     locale: "zh_TW",
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Cheese&Egg｜日內量化決策台",
-    description: "OKX 已收盤行情、三套日內策略、結構目標與淨 RR。",
+    description: "30 個 OKX 永續市場、公開強平事件、大戶籌碼壓力、三套日內策略與淨 RR。",
     images: ["/og.jpg"],
   },
 };

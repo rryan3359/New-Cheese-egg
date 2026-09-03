@@ -7,6 +7,7 @@ import {
   emptyCandleMap,
   type Candle,
   type CandleMap,
+  type LiquidationEvent,
   type OkxFetchPlan,
   type ProviderHealth,
   type RawAsset,
@@ -56,6 +57,27 @@ const oiHistSchema = z
     data: z.array(z.tuple([z.string(), z.string(), z.string().optional(), z.string().optional()]).rest(z.string())),
   })
   .passthrough();
+const instrumentSchema = envelope(
+  z.object({
+    instId: z.string(),
+    ctVal: z.string(),
+    ctMult: z.string(),
+    ctValCcy: z.string(),
+  }).passthrough(),
+);
+const liquidationSchema = envelope(
+  z.object({
+    instFamily: z.string(),
+    instId: z.string(),
+    details: z.array(z.object({
+      bkPx: z.string(),
+      posSide: z.string(),
+      side: z.string(),
+      sz: z.string(),
+      ts: z.string(),
+    }).passthrough()),
+  }).passthrough(),
+);
 const barMap: Record<Timeframe, string> = {
   "1m": "1m",
   "5m": "5m",
@@ -129,7 +151,7 @@ function createOkxScheduler(signal?: AbortSignal) {
     // OKX candles permit materially more throughput than the public account
     // endpoints. 75 ms keeps the full 30 × 6 L3 plan inside its 20 s server
     // deadline while remaining below the documented candles burst ceiling.
-    const intervalMs = path.endsWith("/candles") ? 75 : 120;
+    const intervalMs = path.endsWith("/candles") ? 75 : path.endsWith("/liquidation-orders") ? 250 : 120;
     const scheduledAt = Math.max(Date.now(), nextRequestAt.get(path) ?? 0);
     nextRequestAt.set(path, scheduledAt + intervalMs);
     const waitMs = scheduledAt - Date.now();
@@ -174,6 +196,17 @@ function message(reason: unknown) {
   return reason instanceof Error ? reason.message : String(reason);
 }
 
+type ContractSpec = { ctVal: number; ctMult: number; ctValCcy: string };
+
+export function contractNotionalUsd(contracts: number, price: number, spec: ContractSpec | undefined, base: string) {
+  if (!spec || !Number.isFinite(contracts) || !Number.isFinite(price) || contracts <= 0 || price <= 0) return null;
+  const contractSize = spec.ctVal * spec.ctMult;
+  if (!Number.isFinite(contractSize) || contractSize <= 0) return null;
+  if (spec.ctValCcy === base) return contracts * contractSize * price;
+  if (spec.ctValCcy === "USDT" || spec.ctValCcy === "USD") return contracts * contractSize;
+  return null;
+}
+
 function requested(
   plan: OkxFetchPlan,
   field: "tickerSymbols" | "fundingSymbols" | "openInterestSymbols",
@@ -191,8 +224,17 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
     ? await fetchOkx(`${API}/api/v5/market/tickers?instType=SWAP`, tickerSchema, schedule, options.signal)
     : null;
   const tickerMap = new Map((tickerResult?.data.data ?? []).map((item) => [item.instId, item]));
+  const needsDerivatives = plan.full || plan.openInterestSymbols.some((symbol) => symbols.includes(symbol));
+  const instrumentResult = needsDerivatives
+    ? await fetchOkx(`${API}/api/v5/public/instruments?instType=SWAP`, instrumentSchema, schedule, options.signal).catch(() => null)
+    : null;
+  const instrumentMap = new Map((instrumentResult?.data.data ?? []).map((item) => [item.instId, {
+    ctVal: Number(item.ctVal),
+    ctMult: Number(item.ctMult),
+    ctValCcy: item.ctValCcy,
+  }]));
 
-  const concurrency = Object.keys(plan.candleTimeframes).length || plan.full ? 3 : 3;
+  const concurrency = Object.keys(plan.candleTimeframes).length || plan.full ? 3 : 5;
   const assets = await mapWithConcurrency(symbols, concurrency, async (symbol): Promise<RawAsset> => {
     const base = symbol.replace("USDT", "");
     const instId = `${base}-USDT-SWAP`;
@@ -229,10 +271,26 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
           options.signal,
         ).catch(() => null)
       : null;
+    const topPositionPromise = needsOi
+      ? fetchOkx(
+          `${API}/api/v5/rubik/stat/contracts/long-short-position-ratio-contract-top-trader?instId=${instId}&period=1H`,
+          longShortSchema,
+          schedule,
+          options.signal,
+        ).catch(() => null)
+      : null;
+    const liquidationPromise = needsOi
+      ? fetchOkx(
+          `${API}/api/v5/public/liquidation-orders?instType=SWAP&instFamily=${base}-USDT&state=filled&limit=100`,
+          liquidationSchema,
+          schedule,
+          options.signal,
+        ).catch(() => null)
+      : null;
 
     const candleLimit = (tf: Timeframe) => CANDLE_LIMITS[tf];
 
-    const [fundingResult, oiResult, oiHistResult, lsResult, topLsResult, candleResults] = await Promise.all([
+    const [fundingResult, oiResult, oiHistResult, lsResult, topLsResult, topPositionResult, liquidationResult, candleResults] = await Promise.all([
       fundingPromise
         ? fundingPromise
             .then((value) => ({ status: "fulfilled" as const, value }))
@@ -268,6 +326,20 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
                 ? { status: "fulfilled" as const, value }
                 : { status: "rejected" as const, reason: new Error("Top LS ratio unavailable") },
             )
+            .catch((reason) => ({ status: "rejected" as const, reason }))
+        : Promise.resolve(null),
+      topPositionPromise
+        ? topPositionPromise
+            .then((value) => value
+              ? { status: "fulfilled" as const, value }
+              : { status: "rejected" as const, reason: new Error("Top position ratio unavailable") })
+            .catch((reason) => ({ status: "rejected" as const, reason }))
+        : Promise.resolve(null),
+      liquidationPromise
+        ? liquidationPromise
+            .then((value) => value
+              ? { status: "fulfilled" as const, value }
+              : { status: "rejected" as const, reason: new Error("Liquidations unavailable") })
             .catch((reason) => ({ status: "rejected" as const, reason }))
         : Promise.resolve(null),
       Promise.allSettled(
@@ -319,6 +391,28 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
       lsResult?.status === "fulfilled" ? parseRatioSeries(lsResult.value.data.data as [string, string][]) : [];
     const topRatios =
       topLsResult?.status === "fulfilled" ? parseRatioSeries(topLsResult.value.data.data as [string, string][]) : [];
+    const topPositionRatios =
+      topPositionResult?.status === "fulfilled" ? parseRatioSeries(topPositionResult.value.data.data as [string, string][]) : [];
+    const contractSpec = instrumentMap.get(instId);
+    const liquidationEvents: LiquidationEvent[] = liquidationResult?.status === "fulfilled"
+      ? liquidationResult.value.data.data.flatMap((group) => group.details).flatMap((detail, index) => {
+          const bankruptcyPrice = Number(detail.bkPx);
+          const contracts = Number(detail.sz);
+          const occurredMs = Number(detail.ts);
+          if (!Number.isFinite(bankruptcyPrice) || bankruptcyPrice <= 0 || !Number.isFinite(contracts) || contracts <= 0 || !Number.isFinite(occurredMs)) return [];
+          const positionSide: LiquidationEvent["positionSide"] = detail.posSide === "long" || (detail.posSide !== "short" && detail.side === "sell") ? "Long" : "Short";
+          return [{
+            id: `${symbol}-${detail.ts}-${index}-${detail.sz}`,
+            symbol,
+            positionSide,
+            bankruptcyPrice,
+            contracts,
+            notionalUsd: contractNotionalUsd(contracts, bankruptcyPrice, contractSpec, base),
+            occurredAt: new Date(occurredMs).toISOString(),
+            source: "OKX" as const,
+          }];
+        }).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+      : [];
 
     const errors = [
       ...(fundingResult?.status === "rejected" ? [`${base} Funding: ${message(fundingResult.reason)}`] : []),
@@ -326,6 +420,8 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
       ...(oiHistResult?.status === "rejected" ? [`${base} OI hist: ${message(oiHistResult.reason)}`] : []),
       ...(lsResult?.status === "rejected" ? [`${base} LS ratio: ${message(lsResult.reason)}`] : []),
       ...(topLsResult?.status === "rejected" ? [`${base} Top LS: ${message(topLsResult.reason)}`] : []),
+      ...(topPositionResult?.status === "rejected" ? [`${base} Top position: ${message(topPositionResult.reason)}`] : []),
+      ...(liquidationResult?.status === "rejected" ? [`${base} liquidations: ${message(liquidationResult.reason)}`] : []),
       ...timeframePlan.flatMap((timeframe, index) =>
         candleResults[index]?.status === "rejected"
           ? [`${base} ${timeframe}: ${message((candleResults[index] as PromiseRejectedResult).reason)}`]
@@ -351,7 +447,10 @@ export async function getOkxData(plan: OkxFetchPlan = fullOkxFetchPlan(), option
       openInterest,
       oiChange1h,
       topRatios,
+      topPositionRatios,
       globalRatios,
+      liquidationEvents,
+      liquidationAvailable: liquidationResult?.status === "fulfilled",
       candlesByTimeframe: timeframePlan.length ? candlesByTimeframe : emptyCandleMap(),
       latencyMs: Date.now() - startedAt,
       errors,

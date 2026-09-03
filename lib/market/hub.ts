@@ -30,7 +30,7 @@ const STALE_TTL_MS = 10 * 60_000;
 /** Tier-scoped deadlines — OKX only */
 const OKX_DEADLINE_MS: Record<FetchTier, number> = {
   l1: 4_000,
-  l2: 12_000,
+  l2: 18_000,
   l3: 20_000,
 };
 
@@ -152,11 +152,11 @@ async function withDeadline<T>(label: string, timeoutMs: number, factory: (signa
 }
 
 function fetchedFields(plan: OkxFetchPlan) {
-  if (plan.full) return ["ticker", "funding", "openInterest", "oiChange", "longShortRatio", `candles:${TIMEFRAMES.join("/")}`];
+  if (plan.full) return ["ticker", "funding", "openInterest", "oiChange", "longShortRatios", "topPositionRatio", "liquidations", `candles:${TIMEFRAMES.join("/")}`];
   return [
     ...plan.tickerSymbols.map((symbol) => `${symbol}:ticker`),
     ...plan.fundingSymbols.map((symbol) => `${symbol}:funding`),
-    ...plan.openInterestSymbols.map((symbol) => `${symbol}:openInterest+positioning`),
+    ...plan.openInterestSymbols.map((symbol) => `${symbol}:openInterest+positioning+liquidations`),
     ...Object.entries(plan.candleTimeframes).flatMap(([symbol, timeframes]) =>
       (timeframes ?? []).map((timeframe) => `${symbol}:candles:${timeframe}`),
     ),

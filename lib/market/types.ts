@@ -16,6 +16,29 @@ export type Metric<T> = {
 export type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 export type CandleMap = Record<Timeframe, Candle[]>;
 
+export type LiquidationEvent = {
+  id: string;
+  symbol: string;
+  positionSide: "Long" | "Short";
+  bankruptcyPrice: number;
+  contracts: number;
+  notionalUsd: number | null;
+  occurredAt: string;
+  source: "OKX";
+};
+
+export type LiquidationWindow = {
+  events: LiquidationEvent[];
+  eventCount: number;
+  knownNotionalCount: number;
+  longNotionalUsd: number | null;
+  shortNotionalUsd: number | null;
+  totalNotionalUsd: number | null;
+  oldestAt: string | null;
+  newestAt: string | null;
+  sampleLabel: string;
+};
+
 export type RawAsset = {
   symbol: string;
   base: string;
@@ -28,7 +51,10 @@ export type RawAsset = {
   openInterest: number | null;
   oiChange1h: number | null;
   topRatios: number[];
+  topPositionRatios?: number[];
   globalRatios: number[];
+  liquidationEvents?: LiquidationEvent[];
+  liquidationAvailable?: boolean;
   candlesByTimeframe: CandleMap;
   latencyMs: number;
   errors: string[];
@@ -220,7 +246,9 @@ export type AssetSnapshot = {
   funding: Metric<number>;
   globalRatio: Metric<number>;
   topRatio: Metric<number>;
+  topPositionRatio: Metric<number>;
   positioning: Metric<number>;
+  liquidations: Metric<LiquidationWindow>;
   timeframes: Record<Timeframe, TimeframeSnapshot>;
   sessionLevels: SessionLevel[];
   events: MarketEvent[];

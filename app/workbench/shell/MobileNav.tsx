@@ -17,9 +17,11 @@ type MobileNavProps = {
 const SHORT_LABEL: Record<string, string> = {
   cockpit: "總攬",
   scanner: "掃描",
-  derivatives: "衍生品",
+  watchlist: "觀察",
+  derivatives: "數據",
   strategy: "策略",
   chart: "圖表",
+  analytics: "分析",
   alerts: "警報",
   risk: "風險",
   journal: "日誌",

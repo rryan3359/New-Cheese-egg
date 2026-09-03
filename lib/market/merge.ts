@@ -10,6 +10,7 @@ import {
   type DataState,
   type MarketHubPayload,
   type Metric,
+  type LiquidationWindow,
   type ProviderPayload,
   type StrategyResult,
   type Timeframe,
@@ -96,20 +97,28 @@ export function mergeProviderPayloads(input: {
     const oiChange = okxMetric(okx?.oiChange1h, latency, "OI change 在 OKX 缺少", now);
     const quoteVolume = okxMetric(okx?.quoteVolume, latency, "Quote volume 在 OKX 缺少", now);
     const topRatios = okx?.topRatios ?? [];
+    const topPositionRatios = okx?.topPositionRatios ?? [];
     const globalRatios = okx?.globalRatios ?? [];
-    const ratioSource: "OKX" | "Calculated" = topRatios.length || globalRatios.length ? "OKX" : "Calculated";
-    let position: number | null = null;
-    let positionReason: string | null = "Positioning 需要 OKX Global／大戶多空比歷史";
-    if (topRatios.length >= 5 && globalRatios.length >= 5) {
-      position = positioningScore(topRatios, globalRatios);
-      positionReason = null;
-    } else if (globalRatios.length >= 5) {
-      const logs = globalRatios.map((ratio) => Math.log(ratio));
-      const average = logs.reduce((sum, value) => sum + value, 0) / logs.length;
-      const deviation = Math.sqrt(logs.reduce((sum, value) => sum + (value - average) ** 2, 0) / logs.length) || 0;
-      position = Math.max(-100, Math.min(100, Math.round((deviation ? (logs.at(-1)! - average) / deviation : 0) * 34)));
-      positionReason = "僅有 Global 多空比（大戶比不足），傾向分數為簡化估算";
-    }
+    const ratioSource: "OKX" | "Calculated" = topRatios.length || topPositionRatios.length || globalRatios.length ? "OKX" : "Calculated";
+    const position = positioningScore(topRatios, globalRatios, topPositionRatios);
+    const positionReason = position === null
+      ? "大戶籌碼壓力需要 OKX 大戶帳戶／持倉比歷史"
+      : globalRatios.length >= 5
+        ? "依 OKX 大戶帳戶／持倉比相對全體的歷史偏離估算；不是錢包持倉或真實集中度"
+        : "全體帳戶比不可用；改以大戶持倉相對大戶帳戶的歷史偏離估算，不補造全體資料";
+    const liquidationEvents = [...(okx?.liquidationEvents ?? [])].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+    const knownNotional = liquidationEvents.filter((event) => event.notionalUsd !== null);
+    const liquidationWindow: LiquidationWindow | null = okx?.liquidationAvailable ? {
+      events: liquidationEvents,
+      eventCount: liquidationEvents.length,
+      knownNotionalCount: knownNotional.length,
+      longNotionalUsd: knownNotional.length ? knownNotional.filter((event) => event.positionSide === "Long").reduce((sum, event) => sum + event.notionalUsd!, 0) : null,
+      shortNotionalUsd: knownNotional.length ? knownNotional.filter((event) => event.positionSide === "Short").reduce((sum, event) => sum + event.notionalUsd!, 0) : null,
+      totalNotionalUsd: knownNotional.length ? knownNotional.reduce((sum, event) => sum + event.notionalUsd!, 0) : null,
+      oldestAt: liquidationEvents.at(-1)?.occurredAt ?? null,
+      newestAt: liquidationEvents[0]?.occurredAt ?? null,
+      sampleLabel: liquidationEvents.length ? `OKX 最新 ${liquidationEvents.length} 筆公開強平事件` : "OKX 公開端點目前未返回事件",
+    } : null;
     const timeframes = Object.fromEntries(TIMEFRAMES.map((timeframe) => {
       const candles = okx?.candlesByTimeframe[timeframe] ?? [];
       const source = candles.length ? "OKX" : "Calculated";
@@ -136,7 +145,9 @@ export function mergeProviderPayloads(input: {
       oiChange1h: oiChange, funding,
       globalRatio: okxMetric(okx?.globalRatios.at(-1), latency, "Global 多空比在 OKX 缺少", now),
       topRatio: okxMetric(okx?.topRatios.at(-1), latency, "大戶多空比資料不足（OKX top trader）", now),
+      topPositionRatio: okxMetric(okx?.topPositionRatios?.at(-1), latency, "大戶持倉多空比資料不足（OKX top trader）", now),
       positioning: metric(position, ratioSource, position === null ? "missing" : "live", latency, positionReason, now),
+      liquidations: metric(liquidationWindow, liquidationWindow === null ? "Calculated" : "OKX", liquidationWindow === null ? "missing" : "live", latency, liquidationWindow === null ? "OKX 公開強平事件暫時不可用" : null, now),
       timeframes, sessionLevels, events, strategies, setup: preferredSetup(strategies),
     };
   }).filter((asset) => asset.price.value !== null || TIMEFRAMES.some((timeframe) => asset.timeframes[timeframe].candles.length));
@@ -238,7 +249,8 @@ export function mergeSnapshotsProgressive(prev: MarketHubPayload | null, next: M
       change24h: pickMetric(a.change24h, b.change24h), quoteVolume: pickMetric(a.quoteVolume, b.quoteVolume),
       openInterest: pickMetric(a.openInterest, b.openInterest), oiChange1h: pickMetric(a.oiChange1h, b.oiChange1h),
       funding: pickMetric(a.funding, b.funding), globalRatio: pickMetric(a.globalRatio, b.globalRatio),
-      topRatio: pickMetric(a.topRatio, b.topRatio), positioning: pickMetric(a.positioning, b.positioning),
+      topRatio: pickMetric(a.topRatio, b.topRatio), topPositionRatio: pickMetric(a.topPositionRatio, b.topPositionRatio),
+      positioning: pickMetric(a.positioning, b.positioning), liquidations: pickMetric(a.liquidations, b.liquidations),
       timeframes,
       sessionLevels: b.sessionLevels?.length ? b.sessionLevels : (a.sessionLevels ?? []),
       events: b.events?.length ? b.events : (a.events ?? []),

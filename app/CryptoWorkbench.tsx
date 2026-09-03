@@ -11,10 +11,12 @@ import { usePersistence } from "./hooks/usePersistence";
 import {
   ChartView,
   CockpitView,
+  CrossSectionView,
   DerivativesView,
   EmptyState,
   ScannerView,
   StrategyView,
+  WatchlistView,
 } from "./workbench/MarketViews";
 import { AlertsView, HealthView, JournalView, RiskView, SettingsView } from "./workbench/ToolViews";
 import { DataBanners } from "./workbench/shell/DataBanners";
@@ -23,20 +25,22 @@ import { PriceTicker } from "./workbench/shell/PriceTicker";
 import { Sidebar } from "./workbench/shell/Sidebar";
 import { Topbar } from "./workbench/shell/Topbar";
 
-type ViewId = "cockpit" | "scanner" | "derivatives" | "strategy" | "chart" | "alerts" | "risk" | "journal" | "health" | "settings";
+type ViewId = "cockpit" | "scanner" | "watchlist" | "derivatives" | "strategy" | "chart" | "analytics" | "alerts" | "risk" | "journal" | "health" | "settings";
 type ThemeMode = "light" | "dark";
 
 const navigation = [
   { id: "cockpit", number: "01", label: "交易總攬", eyebrow: "TRADING OVERVIEW" },
   { id: "scanner", number: "02", label: "機會掃描器", eyebrow: "OPPORTUNITY SCANNER" },
-  { id: "derivatives", number: "03", label: "衍生品", eyebrow: "DERIVATIVES" },
-  { id: "strategy", number: "04", label: "策略工作台", eyebrow: "STRATEGY DESK" },
-  { id: "chart", number: "05", label: "圖表決策", eyebrow: "CHART WORKSPACE" },
-  { id: "alerts", number: "06", label: "警報中心", eyebrow: "ALERT CENTER" },
-  { id: "risk", number: "07", label: "風險管理", eyebrow: "RISK MANAGER" },
-  { id: "journal", number: "08", label: "交易日誌", eyebrow: "TRADING JOURNAL" },
-  { id: "health", number: "09", label: "資料健康", eyebrow: "DATA HEALTH" },
-  { id: "settings", number: "10", label: "設定", eyebrow: "SETTINGS" },
+  { id: "watchlist", number: "03", label: "觀察清單", eyebrow: "WATCHLIST" },
+  { id: "derivatives", number: "04", label: "市場數據", eyebrow: "MARKET DATA" },
+  { id: "strategy", number: "05", label: "策略工作台", eyebrow: "STRATEGY DESK" },
+  { id: "chart", number: "06", label: "圖表決策", eyebrow: "CHART WORKSPACE" },
+  { id: "analytics", number: "07", label: "橫截面分析", eyebrow: "CROSS-SECTION" },
+  { id: "alerts", number: "08", label: "警報中心", eyebrow: "ALERT CENTER" },
+  { id: "risk", number: "09", label: "風險管理", eyebrow: "RISK MANAGER" },
+  { id: "journal", number: "10", label: "交易日誌", eyebrow: "TRADING JOURNAL" },
+  { id: "health", number: "11", label: "資料健康", eyebrow: "DATA HEALTH" },
+  { id: "settings", number: "12", label: "設定", eyebrow: "SETTINGS" },
 ] as const;
 
 export default function CryptoWorkbench() {
@@ -235,7 +239,7 @@ export default function CryptoWorkbench() {
       />
     );
 
-    if (!data && ["cockpit", "scanner", "derivatives", "strategy", "chart"].includes(activeView)) {
+    if (!data && ["cockpit", "scanner", "watchlist", "derivatives", "strategy", "chart", "analytics"].includes(activeView)) {
       const label = navigation.find((item) => item.id === activeView)?.label ?? "市場功能";
       return marketUnavailable(label);
     }
@@ -263,8 +267,10 @@ export default function CryptoWorkbench() {
         return <SettingsView settings={settings} persistence={persistence} onChange={updateSettings} data={data} />;
       case "scanner":
         return data ? <ScannerView data={data} watchlist={settings.watchlist} minimumNetRr={settings.minimumNetRr} onOpenChart={openChart} /> : marketUnavailable("機會掃描器");
+      case "watchlist":
+        return data ? <WatchlistView data={data} watchlist={settings.watchlist} onOpenChart={openChart} onToggleWatchlist={toggleWatchlist} /> : marketUnavailable("觀察清單");
       case "derivatives":
-        return data ? <DerivativesView data={data} /> : marketUnavailable("衍生品");
+        return data ? <DerivativesView data={data} /> : marketUnavailable("市場數據");
       case "strategy":
         return data ? <StrategyView data={data} onOpenChart={openChart} /> : marketUnavailable("策略工作台");
       case "chart":
@@ -280,6 +286,8 @@ export default function CryptoWorkbench() {
             theme={theme}
           />
         ) : marketUnavailable("圖表決策");
+      case "analytics":
+        return data ? <CrossSectionView data={data} onOpenChart={openChart} /> : marketUnavailable("橫截面分析");
       default:
         return data ? <CockpitView data={data} watchlist={settings.watchlist} onNavigate={navigate} onOpenChart={openChart} onCreateAlert={createSetupAlert} onToggleWatchlist={toggleWatchlist} /> : marketUnavailable("交易總攬");
     }

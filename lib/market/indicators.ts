@@ -118,13 +118,33 @@ export function bollingerWidthPercentile(candles: Candle[], period = 20, lookbac
   return percentileRank(widths.slice(-lookback, -1), current);
 }
 
-export function positioningScore(topRatios: number[], globalRatios: number[]) {
-  const size = Math.min(topRatios.length, globalRatios.length);
+function ratioSpreadZScore(leaderRatios: number[], globalRatios: number[]) {
+  const size = Math.min(leaderRatios.length, globalRatios.length);
   if (size < 5) return null;
-  const spreads = Array.from({ length: size }, (_, index) => Math.log(topRatios[index]) - Math.log(globalRatios[index]));
+  const leader = leaderRatios.slice(-size);
+  const global = globalRatios.slice(-size);
+  const spreads = leader.map((ratio, index) => Math.log(ratio) - Math.log(global[index]));
   const average = mean(spreads)!;
   const deviation = standardDeviation(spreads) ?? 0;
-  const zScore = deviation ? (spreads.at(-1)! - average) / deviation : 0;
-  return Math.max(-100, Math.min(100, Math.round(zScore * 34)));
+  return deviation ? (spreads.at(-1)! - average) / deviation : 0;
+}
+
+/**
+ * Relative positioning pressure, not holder concentration or wallet ownership.
+ * Positive means OKX top-trader ratios are unusually long versus all accounts;
+ * negative means unusually short. If the global series is unavailable, compare
+ * top-trader position value with top-trader account count instead.
+ */
+export function positioningScore(topAccountRatios: number[], globalRatios: number[], topPositionRatios: number[] = []) {
+  const versusMarket = [
+    ratioSpreadZScore(topAccountRatios, globalRatios),
+    ratioSpreadZScore(topPositionRatios, globalRatios),
+  ].filter((value): value is number => value !== null);
+  const components = versusMarket.length
+    ? versusMarket
+    : [ratioSpreadZScore(topPositionRatios, topAccountRatios)].filter((value): value is number => value !== null);
+  if (!components.length) return null;
+  const combined = components.reduce((sum, value) => sum + value, 0) / components.length;
+  return Math.max(-100, Math.min(100, Math.round(combined * 34)));
 }
 

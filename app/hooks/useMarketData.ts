@@ -24,7 +24,7 @@ type UseMarketDataOptions = {
 const CLIENT_SNAPSHOT_TTL_MS = 24 * 60 * 60_000;
 const TIER_DEADLINE_MS: Record<FetchTier, number> = {
   l1: 8_000,
-  l2: 14_000,
+  l2: 20_000,
   l3: 22_000,
 };
 
@@ -47,7 +47,21 @@ function normalizeCachedStrategies(payload: MarketHubPayload): MarketHubPayload 
     ...payload,
     assets: payload.assets.map((asset) => {
       const strategies = asset.strategies.map(normalizeStrategyResult);
-      return { ...asset, strategies, setup: asset.setup ? normalizeStrategyResult(asset.setup) : null };
+      const missingMetric = {
+        value: null,
+        source: "Calculated" as const,
+        state: "missing" as const,
+        updatedAt: asset.price.updatedAt,
+        latencyMs: null,
+        reason: "舊版快取沒有此欄位；等待 L2 更新",
+      };
+      return {
+        ...asset,
+        topPositionRatio: asset.topPositionRatio ?? missingMetric,
+        liquidations: asset.liquidations ?? missingMetric,
+        strategies,
+        setup: asset.setup ? normalizeStrategyResult(asset.setup) : null,
+      };
     }),
   };
 }
